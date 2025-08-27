@@ -13,7 +13,7 @@ def main():
     startTime = time.perf_counter()
     sudoku = Sudoku.Sudoku(board)
     sudoku.print_board()
-    # print(sudoku.candidates)
+    print(sudoku.candidates)
     endTime = time.perf_counter()
     print(f"Total Time Took: {endTime - startTime}")
         
