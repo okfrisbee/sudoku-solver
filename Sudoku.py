@@ -11,14 +11,17 @@ class Sudoku():
         self.build_peers()
         self.build_candidates()
 
+    def print_board(self):
+        for i, cell in enumerate(self.board):
+            if i % 9 == 0:
+                print()
+            print(cell, end=" ")
+        print()
+
     def index_to_coordinates(self, index):
         row, col = divmod(index, 9)
         box = (row // 3) * 3 + (col // 3)
         return row, col, box
-    
-    def cell_value_at(self, index):
-        row, col, _ = self.index_to_coordinates(index)
-        return self.board[row][col]
 
     def build_houses(self):
         for cell in range(81):
@@ -35,19 +38,24 @@ class Sudoku():
     def build_candidates(self):
         digits = set(range(1, 10))
         for cell in range(81):
-            if self.cell_value_at(cell):
-                self.candidates[cell] = {self.cell_value_at(cell)}
+            if self.board[cell]:
+                self.candidates[cell] = {self.board[cell]}
             else:
                 used = set()
                 for peer in self.peers[cell]:
-                    peer_value = self.cell_value_at(peer)
+                    peer_value = self.board[peer]
                     if peer_value:
                         used.add(peer_value)
                 self.candidates[cell] = digits - used
 
     def assign(self, index, value):
-        row, col, _ = self.index_to_coordinates(index)
-        self.board[row][col] = value
+        self.board[index] = value
         self.candidates[index] = {value}
         for peer in self.peers[index]:
             self.candidates[peer].discard(value)
+
+    def is_valid(self, index, value):
+        for peer in self.peers[index]:
+            if self.board[peer] == value:
+                return False
+        return True
