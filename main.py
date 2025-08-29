@@ -9,11 +9,12 @@ def get_sudoku_puzzles(file):
         return digits
         
 def main():
-    board = "608000301700050002040000050200608004105020708000070000000000000810000079070103080"
+    board = "800000000043900008001000405039600027000000000006230004000300040020800900000005102"
     startTime = time.perf_counter()
     sudoku = Sudoku.Sudoku(board)
     sudoku.print_board()
-    print(sudoku.candidates)
+    sudoku.backtrack()
+    sudoku.print_board()
     endTime = time.perf_counter()
     print(f"Total Time Took: {endTime - startTime}")
         
