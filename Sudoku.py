@@ -1,5 +1,3 @@
-import time
-
 class Sudoku():
     def __init__(self, board):
         self.board = [int(num) for num in board]
@@ -8,10 +6,24 @@ class Sudoku():
         self.boxes = [[] for _ in range(9)]
         self.peers = [set() for _ in range(81)]
         self.candidates = [set() for _ in range(81)]
+        self.unassigned = set()
 
         self.build_houses()
         self.build_peers()
         self.build_candidates()
+        self.build_unassigned()
+
+    def index_to_coordinates(self, index):
+        row, col = divmod(index, 9)
+        box = (row // 3) * 3 + (col // 3)
+        return row, col, box
+    
+    def print_board(self):
+        for i, cell in enumerate(self.board):
+            if i % 9 == 0:
+                print()
+            print(cell, end=" ")
+        print()
 
     def build_houses(self):
         for cell in range(81):
@@ -39,22 +51,25 @@ class Sudoku():
                         used.add(peer_value)
                 self.candidates[cell] = digits - used
 
-    def print_board(self):
+    def build_unassigned(self):
         for i, cell in enumerate(self.board):
-            if i % 9 == 0:
-                print()
-            print(cell, end=" ")
-        print()
+            if cell == 0:
+                self.unassigned.add(i)
 
-    def index_to_coordinates(self, index):
-        row, col = divmod(index, 9)
-        box = (row // 3) * 3 + (col // 3)
-        return row, col, box
+    def is_valid(self, index, value):
+        for peer in self.peers[index]:
+            if self.board[peer] == value:
+                return False
+        return True
+    
+    def is_complete(self):
+        return len(self.unassigned) == 0
 
     def assign(self, index, value):
         previous_candidates = self.candidates[index]
         self.board[index] = value
         self.candidates[index] = {value}
+        self.unassigned.remove(index)
         
         removed_peers = []
         for peer in self.peers[index]:
@@ -66,34 +81,11 @@ class Sudoku():
     def unassign(self, index, value, previous_candidates, removed_peers):
         self.board[index] = 0
         self.candidates[index] = previous_candidates
+        self.unassigned.add(index)
+        
         for peer in removed_peers:
             if self.board[peer] == 0 and self.is_valid(peer, value):
                 self.candidates[peer].add(value)
-
-    def is_valid(self, index, value):
-        for peer in self.peers[index]:
-            if self.board[peer] == value:
-                return False
-        return True
-
-    # def backtrack(self, index=0):
-    #     if index == 81:
-    #         return True
-        
-    #     if self.board[index] != 0:
-    #         return self.backtrack(index + 1)
-
-    #     options = self.candidates[index]
-    #     for candidate in options:
-    #         if not self.is_valid(index, candidate):
-    #             continue
-    #         previous_candidates, removed = self.assign(index, candidate)
-    #         if self.backtrack(index + 1):
-    #             return True
-    #         self.unassign(index, candidate, previous_candidates, removed)
-        
-    #     return False
-
 
     def backtrack(self, index=0):
             if index == 81:
@@ -102,8 +94,7 @@ class Sudoku():
             if self.board[index] != 0:
                 return self.backtrack(index + 1)
 
-            options = self.candidates[index]
-            for candidate in options:
+            for candidate in self.candidates[index]:
                 if not self.is_valid(index, candidate):
                     continue
                 self.board[index] = candidate
@@ -112,3 +103,22 @@ class Sudoku():
                 self.board[index] = 0
             
             return False
+    
+    def find_mrv(self):
+        return min(self.unassigned, key=lambda index: len(self.candidates[index]), default=None)
+
+    def backtrack_with_mrv(self):
+        if self.is_complete():
+            return True
+        
+        index = self.find_mrv()
+        if index == None:
+            return True
+
+        for candidate in self.candidates[index]:
+            previous, removed = self.assign(index, candidate)
+            if self.backtrack_with_mrv():
+                return True
+            self.unassign(index, candidate, previous, removed)
+        
+        return False
