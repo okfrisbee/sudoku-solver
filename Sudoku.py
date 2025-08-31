@@ -71,12 +71,16 @@ class Sudoku():
         self.candidates[index] = {value}
         self.unassigned.remove(index)
         
+        valid = True
         removed_peers = []
         for peer in self.peers[index]:
             if self.board[peer] == 0 and value in self.candidates[peer]:
                 self.candidates[peer].remove(value)
                 removed_peers.append(peer)
-        return previous_candidates, removed_peers
+                if len(self.candidates[peer]) == 0:
+                    valid = False
+
+        return previous_candidates, removed_peers, valid
 
     def unassign(self, index, value, previous_candidates, removed_peers):
         self.board[index] = 0
@@ -107,7 +111,7 @@ class Sudoku():
     def find_mrv(self):
         return min(self.unassigned, key=lambda index: len(self.candidates[index]), default=None)
 
-    def backtrack_with_mrv(self):
+    def backtrack_with_mrv_fc(self):
         if self.is_complete():
             return True
         
@@ -116,8 +120,8 @@ class Sudoku():
             return True
 
         for candidate in self.candidates[index]:
-            previous, removed = self.assign(index, candidate)
-            if self.backtrack_with_mrv():
+            previous, removed, valid = self.assign(index, candidate)
+            if valid and self.backtrack_with_mrv_fc():
                 return True
             self.unassign(index, candidate, previous, removed)
         

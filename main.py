@@ -13,7 +13,7 @@ def main():
     startTime = time.perf_counter()
     mrv = Sudoku.Sudoku(board)
     mrv.print_board()
-    mrv.backtrack_with_mrv()
+    mrv.backtrack_with_mrv_fc()
     mrv.print_board()
     endTime = time.perf_counter()
     mrv_time = endTime - startTime
@@ -25,7 +25,10 @@ def main():
     endTime = time.perf_counter()
     no_mrv_time = endTime - startTime
     
-    print(f"Total Time Took: MRV: {mrv_time} and No MRV: {no_mrv_time}")
+    print()
+    print(f"Total Time Took:\nMRV: {mrv_time}\nNo MRV: {no_mrv_time}")
+    quickest = "MRV" if mrv_time < no_mrv_time else "No MRV"
+    print(f"{quickest} was faster by {round(max(mrv_time, no_mrv_time)/min(mrv_time, no_mrv_time))} times.")
         
 
 if __name__ == "__main__":
