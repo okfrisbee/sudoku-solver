@@ -32,6 +32,16 @@ def benchmark():
         
 def main():
     benchmark()
+    # board = "800000000043900008001000405039600027000000000006230004000300040020800900000005102"
+    # startTime = time.perf_counter()
+    # mrv = Sudoku.Sudoku(board)
+    # mrv.print_board()
+    # mrv.solve()
+    # mrv.print_board()
+    # endTime = time.perf_counter()
+    # mrv_time = endTime - startTime
+    # print(mrv_time)
+
 
 if __name__ == "__main__":
     main()

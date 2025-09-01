@@ -107,9 +107,6 @@ class Sudoku():
                 self.board[index] = 0
             
             return False
-    
-    def find_mrv(self):
-        return min(self.unassigned, key=lambda index: len(self.candidates[index]), default=None)
 
     def backtrack_with_mrv_fc(self):
         if self.is_complete():
@@ -126,3 +123,56 @@ class Sudoku():
             self.unassign(index, candidate, previous, removed)
         
         return False
+    
+    def solve(self):
+        while not self.is_complete():
+            eliminated = self.eliminate_naked_singles()
+            
+            if eliminated == 0:
+                eliminated = self.eliminate_hidden_singles()
+            
+            if eliminated == 0:
+                break
+
+        self.backtrack()
+
+    def find_mrv(self):
+        return min(self.unassigned, key=lambda index: len(self.candidates[index]), default=None)
+
+    def eliminate_naked_singles(self):
+        eliminated = 0
+        for cell in list(self.unassigned):
+            if len(self.candidates[cell]) == 1:
+                self.assign(cell, list(self.candidates[cell])[0])
+                eliminated += 1
+        return eliminated
+
+    def eliminate_hidden_singles(self):
+        eliminated = 0
+        houses = self.rows + self.cols + self.boxes
+
+        for house in houses:
+            seen = [None for _ in range(9)]
+
+            for cell in house:
+                if self.board[cell] != 0:
+                    continue
+
+                for candidate in self.candidates[cell]:
+                    match seen[candidate - 1]:
+                        case -1:
+                            continue
+                        case None:
+                            seen[candidate - 1] = cell
+                        case _:
+                            seen[candidate - 1] = -1
+
+            for i, cell in enumerate(seen):
+                match cell:
+                    case -1 | None:
+                        continue
+                    case _:
+                        self.assign(cell, i + 1)
+                        eliminated += 1
+                        
+        return eliminated
