@@ -129,12 +129,15 @@ class Sudoku():
             eliminated = self.eliminate_naked_singles()
             
             if eliminated == 0:
-                eliminated = self.eliminate_hidden_singles()
+                eliminated += self.eliminate_hidden_singles()
             
+            if eliminated == 0:
+                eliminated += self.eliminate_naked_pairs()
+
             if eliminated == 0:
                 break
 
-        self.backtrack()
+        return self.backtrack()
 
     def find_mrv(self):
         return min(self.unassigned, key=lambda index: len(self.candidates[index]), default=None)
@@ -175,4 +178,31 @@ class Sudoku():
                         self.assign(cell, i + 1)
                         eliminated += 1
                         
+        return eliminated
+
+    def eliminate_naked_pairs(self):
+        eliminated = 0
+        houses = self.rows + self.cols + self.boxes
+
+        for house in houses:
+            two_celled = []
+            for cell in house:
+                if self.board[cell] != 0:
+                    continue
+
+                if len(self.candidates[cell]) == 2:
+                    two_celled.append(cell)
+
+            if len(two_celled) != 2:
+                continue
+
+            if self.candidates[two_celled[0]] == self.candidates[two_celled[1]]:
+                for cell in house:
+                    if cell in two_celled:
+                        continue
+                    
+                    if self.candidates[two_celled[0]].issubset(self.candidates[cell]):
+                        self.candidates[cell] -= self.candidates[two_celled[0]]
+                        eliminated += 1
+
         return eliminated

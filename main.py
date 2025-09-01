@@ -21,7 +21,7 @@ def benchmark():
 
         startTime = time.perf_counter()
         mrv = Sudoku.Sudoku(puzzle)
-        mrv.backtrack_with_mrv_fc()
+        mrv.solve()
         endTime = time.perf_counter()
         mrv_time += endTime - startTime
         print(f"MRV Finished {i + 1} and {puzzle}")
