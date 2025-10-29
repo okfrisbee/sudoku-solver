@@ -77,7 +77,6 @@ class Sudoku():
         """Returns True if no unassigned cells remain."""
         return len(self.unassigned) == 0
 
-
     # Assignment Methods
     def assign(self, index, value):
         """Assigns a value to a cell and updates the peers' candidate sets."""
@@ -104,8 +103,7 @@ class Sudoku():
         self.unassigned.add(index)
         
         for peer in removed_peers:
-            if self.board[peer] == 0 and self.is_valid(peer, value):
-                self.candidates[peer].add(value)
+            self.candidates[peer].add(value)
 
 
     # Sudoku Strategies
@@ -149,7 +147,7 @@ class Sudoku():
                         
         return eliminated
 
-    def eliminate_naked_pairs(self):
+    def find_naked_pairs(self):
         """Finds naked pairs and removes them from the candidates of other cells in the same house."""
         eliminated = 0
         houses = self.rows + self.cols + self.boxes
@@ -171,7 +169,7 @@ class Sudoku():
                     if cell in two_celled:
                         continue
                     
-                    if self.candidates[two_celled[0]].issubset(self.candidates[cell]):
+                    if self.candidates[cell].intersection(self.candidates[two_celled[0]]):
                         self.candidates[cell] -= self.candidates[two_celled[0]]
                         eliminated += 1
 
@@ -189,7 +187,7 @@ class Sudoku():
                 return True
             
             if self.board[index] != 0:
-                return self.backtrack(index + 1)
+                return self.backtrack_naive(index + 1)
 
             for candidate in self.candidates[index]:
                 if not self.is_valid(index, candidate):
@@ -227,8 +225,8 @@ class Sudoku():
                 eliminated += self.eliminate_hidden_singles()
             
             if eliminated == 0:
-                eliminated += self.eliminate_naked_pairs()
-
+                eliminated += self.find_naked_pairs()
+                
             if eliminated == 0:
                 break
 
