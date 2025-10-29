@@ -1,5 +1,7 @@
 class Sudoku():
+    # Constructor and Setup
     def __init__(self, board):
+        """Initialize a Sudoku board along with helper structures."""
         self.board = [int(num) for num in board]
         self.rows = [[] for _ in range(9)]
         self.cols = [[] for _ in range(9)]
@@ -13,19 +15,8 @@ class Sudoku():
         self.build_candidates()
         self.build_unassigned()
 
-    def index_to_coordinates(self, index):
-        row, col = divmod(index, 9)
-        box = (row // 3) * 3 + (col // 3)
-        return row, col, box
-    
-    def print_board(self):
-        for i, cell in enumerate(self.board):
-            if i % 9 == 0:
-                print()
-            print(cell, end=" ")
-        print()
-
     def build_houses(self):
+        """Creates lists of cell indices for each row, column, and box."""
         for cell in range(81):
             row, col, box = self.index_to_coordinates(cell)
             self.rows[row].append(cell)
@@ -33,11 +24,13 @@ class Sudoku():
             self.boxes[box].append(cell)
 
     def build_peers(self):
+        """Creates for each cell a set of indices of neighboring cells in the same row, column, or box."""
         for cell in range(81):
             row, col, box = self.index_to_coordinates(cell)
             self.peers[cell] = (set(self.rows[row]) | set(self.cols[col]) | set(self.boxes[box])) - {cell}
 
     def build_candidates(self):
+        """Creates a set of possible candidates for each cell if not already assigned."""
         digits = set(range(1, 10))
         for cell in range(81):
             current_cell_value = self.board[cell]
@@ -52,20 +45,42 @@ class Sudoku():
                 self.candidates[cell] = digits - used
 
     def build_unassigned(self):
+        """Records indices of all currently empty cells (with a value of 0)."""
         for i, cell in enumerate(self.board):
             if cell == 0:
                 self.unassigned.add(i)
 
+
+    # Helper Methods
+    def index_to_coordinates(self, index):
+        """Coverts a 0-80 index to (row, col, box) coordinates."""
+        row, col = divmod(index, 9)
+        box = (row // 3) * 3 + (col // 3)
+        return row, col, box
+    
+    def print_board(self):
+        """Prints the current Sudoku board in a 9x9 grid."""
+        for i, cell in enumerate(self.board):
+            if i % 9 == 0:
+                print()
+            print(cell, end=" ")
+        print()
+
     def is_valid(self, index, value):
+        """Returns True or False if placing value at index violates the rules of Sudoku. """
         for peer in self.peers[index]:
             if self.board[peer] == value:
                 return False
         return True
     
     def is_complete(self):
+        """Returns True if no unassigned cells remain."""
         return len(self.unassigned) == 0
 
+
+    # Assignment Methods
     def assign(self, index, value):
+        """Assigns a value to a cell and updates the peers' candidate sets."""
         previous_candidates = self.candidates[index]
         self.board[index] = value
         self.candidates[index] = {value}
@@ -83,6 +98,7 @@ class Sudoku():
         return previous_candidates, removed_peers, valid
 
     def unassign(self, index, value, previous_candidates, removed_peers):
+        """Unassigns a cell's value and restores the candidate set."""
         self.board[index] = 0
         self.candidates[index] = previous_candidates
         self.unassigned.add(index)
@@ -91,58 +107,10 @@ class Sudoku():
             if self.board[peer] == 0 and self.is_valid(peer, value):
                 self.candidates[peer].add(value)
 
-    def backtrack(self, index=0):
-            if index == 81:
-                return True
-            
-            if self.board[index] != 0:
-                return self.backtrack(index + 1)
 
-            for candidate in self.candidates[index]:
-                if not self.is_valid(index, candidate):
-                    continue
-                self.board[index] = candidate
-                if self.backtrack(index + 1):
-                    return True
-                self.board[index] = 0
-            
-            return False
-
-    def backtrack_with_mrv_fc(self):
-        if self.is_complete():
-            return True
-        
-        index = self.find_mrv()
-        if index == None:
-            return True
-
-        for candidate in self.candidates[index]:
-            previous, removed, valid = self.assign(index, candidate)
-            if valid and self.backtrack_with_mrv_fc():
-                return True
-            self.unassign(index, candidate, previous, removed)
-        
-        return False
-    
-    def solve(self):
-        while not self.is_complete():
-            eliminated = self.eliminate_naked_singles()
-            
-            if eliminated == 0:
-                eliminated += self.eliminate_hidden_singles()
-            
-            if eliminated == 0:
-                eliminated += self.eliminate_naked_pairs()
-
-            if eliminated == 0:
-                break
-
-        return self.backtrack()
-
-    def find_mrv(self):
-        return min(self.unassigned, key=lambda index: len(self.candidates[index]), default=None)
-
+    # Sudoku Strategies
     def eliminate_naked_singles(self):
+        "Automatically fills any cells that has exactly only one possible candidate."
         eliminated = 0
         for cell in list(self.unassigned):
             if len(self.candidates[cell]) == 1:
@@ -151,6 +119,7 @@ class Sudoku():
         return eliminated
 
     def eliminate_hidden_singles(self):
+        """Fills cells with values that only appear in one place within a row, column, or box."""
         eliminated = 0
         houses = self.rows + self.cols + self.boxes
 
@@ -181,6 +150,7 @@ class Sudoku():
         return eliminated
 
     def eliminate_naked_pairs(self):
+        """Finds naked pairs and removes them from the candidates of other cells in the same house."""
         eliminated = 0
         houses = self.rows + self.cols + self.boxes
 
@@ -206,3 +176,60 @@ class Sudoku():
                         eliminated += 1
 
         return eliminated
+
+
+    # Heuristics and Search
+    def find_mrv(self):
+        """Returns the index of an unassigned cell with the fewest remaining candidates."""
+        return min(self.unassigned, key=lambda index: len(self.candidates[index]), default=None)
+
+    def backtrack_naive(self, index=0):
+            """Simple recursive backtracking."""
+            if index == 81:
+                return True
+            
+            if self.board[index] != 0:
+                return self.backtrack(index + 1)
+
+            for candidate in self.candidates[index]:
+                if not self.is_valid(index, candidate):
+                    continue
+                self.board[index] = candidate
+                if self.backtrack_naive(index + 1):
+                    return True
+                self.board[index] = 0
+            
+            return False
+
+    def backtrack(self):
+        """Backtracking with MRV and forward checking."""
+        if self.is_complete():
+            return True
+        
+        index = self.find_mrv()
+        if index == None:
+            return True
+
+        for candidate in self.candidates[index]:
+            previous, removed, valid = self.assign(index, candidate)
+            if valid and self.backtrack():
+                return True
+            self.unassign(index, candidate, previous, removed)
+        
+        return False
+    
+    def solve(self):
+        """Tries Sudoku strategies before searching for a complete solution."""
+        while not self.is_complete():
+            eliminated = self.eliminate_naked_singles()
+            
+            if eliminated == 0:
+                eliminated += self.eliminate_hidden_singles()
+            
+            if eliminated == 0:
+                eliminated += self.eliminate_naked_pairs()
+
+            if eliminated == 0:
+                break
+
+        return self.backtrack()
