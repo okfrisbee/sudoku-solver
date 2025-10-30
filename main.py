@@ -12,11 +12,17 @@ def iterate_sudoku_puzzles(file):
 def run_solver(puzzle, mode="mrv", print_board=False):
     start = time.perf_counter()
     solver = Sudoku.Sudoku(puzzle)
+    valid = solver.validate_board_state()
 
-    if mode == "naive":
-        solver.backtrack_naive()
-    else:
-        solver.solve()
+    if valid:
+        if mode == "naive":
+            valid = solver.backtrack_naive()
+        else:
+            valid = solver.solve()
+
+    if not valid:
+        print("This puzzle is not solvable.")
+        return -1
 
     if print_board:
         print("\nSolved Board:", end="")
@@ -81,18 +87,18 @@ def main():
                 else:
                     return
             
+
             time_elapsed = run_solver(puzzle, print_board=True)
-            print(f"Time Elapsed: {time_elapsed:.4f}s")
-            break
+            if time_elapsed != -1:
+                print(f"Time Elapsed: {time_elapsed:.4f}s")
         elif user_input == "2":
-            print("How many puzzles do you want to test? (Default: 1000)")
+            print("How many puzzles do you want to test? (Default: 1000 and Maximum: 100000)")
             test_count = input()
             if not test_count.isdigit() or int(test_count) < 0:
                 test_count = 1000
 
             print()
             benchmark(int(test_count))
-            break
         elif user_input == "3":
             return
         else:

@@ -67,7 +67,7 @@ class Sudoku():
         print()
 
     def is_valid(self, index, value):
-        """Returns True or False if placing value at index violates the rules of Sudoku. """
+        """Returns True or False if placing value at index violates the rules of Sudoku."""
         for peer in self.peers[index]:
             if self.board[peer] == value:
                 return False
@@ -76,6 +76,25 @@ class Sudoku():
     def is_complete(self):
         """Returns True if no unassigned cells remain."""
         return len(self.unassigned) == 0
+
+    def validate_board_state(self):
+        """Returns True or False if board state is valid within the rules of Sudoku."""
+        if len(self.board) != 81 or not "".join(map(str, self.board)).isdigit():
+            return False
+        
+        houses = self.rows + self.cols + self.boxes
+        for house in houses:
+            seen = [False for _ in range(9)]
+            for cell in house:
+                if self.board[cell] == 0:
+                    continue
+                
+                if not seen[self.board[cell] - 1]:
+                    seen[self.board[cell] - 1] = True
+                else:
+                    return False
+                
+        return True
 
     # Assignment Methods
     def assign(self, index, value):
