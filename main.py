@@ -55,6 +55,7 @@ def benchmark(limit):
     print(f"{faster} was faster by {speedup:.2f}x")
         
 def main():
+    print("Sudoku Solver:")
     while True:
         print("\n-----Menu-----")
         print("1. Enter Puzzle")
