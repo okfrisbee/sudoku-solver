@@ -1,6 +1,6 @@
 import time
 import os
-import Sudoku
+import sudoku_solver
 
 def iterate_sudoku_puzzles(file):
     with open(file) as f:
@@ -11,7 +11,7 @@ def iterate_sudoku_puzzles(file):
     
 def run_solver(puzzle, mode="mrv", print_board=False):
     start = time.perf_counter()
-    solver = Sudoku.Sudoku(puzzle)
+    solver = sudoku_solver.SudokuSolver(puzzle)
     valid = solver.validate_board_state()
 
     if valid:

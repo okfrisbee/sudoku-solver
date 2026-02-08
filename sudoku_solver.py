@@ -1,4 +1,4 @@
-class Sudoku():
+class SudokuSolver():
     # Constructor and Setup
     def __init__(self, board):
         """Initialize a Sudoku board along with helper structures."""
@@ -52,14 +52,15 @@ class Sudoku():
 
 
     # Helper Methods
+    def get_board(self):
+        return self.board
+
     def index_to_coordinates(self, index):
-        """Coverts a 0-80 index to (row, col, box) coordinates."""
         row, col = divmod(index, 9)
         box = (row // 3) * 3 + (col // 3)
         return row, col, box
     
     def print_board(self):
-        """Prints the current Sudoku board in a 9x9 grid."""
         for i, cell in enumerate(self.board):
             if i % 9 == 0:
                 print()
@@ -67,18 +68,15 @@ class Sudoku():
         print()
 
     def is_valid(self, index, value):
-        """Returns True or False if placing value at index violates the rules of Sudoku."""
         for peer in self.peers[index]:
             if self.board[peer] == value:
                 return False
         return True
     
     def is_complete(self):
-        """Returns True if no unassigned cells remain."""
         return len(self.unassigned) == 0
 
     def validate_board_state(self):
-        """Returns True or False if board state is valid within the rules of Sudoku."""
         if len(self.board) != 81 or not "".join(map(str, self.board)).isdigit():
             return False
         
@@ -201,7 +199,6 @@ class Sudoku():
         return min(self.unassigned, key=lambda index: len(self.candidates[index]), default=None)
 
     def backtrack_naive(self, index=0):
-            """Simple recursive backtracking."""
             if index == 81:
                 return True
             
