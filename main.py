@@ -1,6 +1,10 @@
 import time
 import os
 import sudoku_solver
+from sudoku_sat_solver import solve_sudoku
+import matplotlib.pyplot as plt
+import matplotlib
+matplotlib.use("TkAgg")
 
 def iterate_sudoku_puzzles(file):
     with open(file) as f:
@@ -9,57 +13,106 @@ def iterate_sudoku_puzzles(file):
             if len(puzzle) == 81 and puzzle.isdigit():
                 yield puzzle
     
-def run_solver(puzzle, mode="mrv", print_board=False):
+def solve_mrv(board):
+    s = sudoku_solver.SudokuSolver(board)
+    if not s.solve():
+        return None
+    return s.get_board()
+
+def solve_naive(board):
+    s = sudoku_solver.SudokuSolver(board)
+    if not s.backtrack_naive():
+        return None
+    return s.get_board()
+
+def solve_sat(board):
+    try:
+        return solve_sudoku(board)
+    except ValueError:
+        return None
+
+def time_solver(solver_fn, puzzle):
     start = time.perf_counter()
-    solver = sudoku_solver.SudokuSolver(puzzle)
-    valid = solver.validate_board_state()
+    solved = solver_fn(puzzle)
+    elapsed = time.perf_counter() - start
+    return solved, elapsed  
 
-    if valid:
-        if mode == "naive":
-            valid = solver.backtrack_naive()
-        else:
-            valid = solver.solve()
+def run_solver(puzzle, solver_fn, print_board=False):
+    solved, elapsed = time_solver(solver_fn, puzzle)
 
-    if not valid:
-        print("This puzzle is not solvable.")
+    if solved is None:
+        print("Puzzle is not solvable")
         return -1
-
-    if print_board:
-        print("\nSolved Board:", end="")
-        solver.print_board()
     
-    return time.perf_counter() - start
+    if print_board:
+        s = sudoku_solver.SudokuSolver(solved)
+        print("\nSolved Board: ")
+        s.print_board()
 
-def benchmark(limit):
-    naive_total = 0.0
-    mrv_total = 0.0
-    count = 0
+    return elapsed
+
+def benchmark(limit, solvers):
+    total_times = {name: 0.0 for name in solvers}
+    solved_counts = {name: 0 for name in solvers}
+    times_by_solver = {name: [] for name in solvers}
+    tested = 0
+
+    avgs = {}
 
     for i, puzzle in enumerate(iterate_sudoku_puzzles("puzzle_bank.txt"), start=1):
         if limit and i > limit:
             break
 
-        naive_time = run_solver(puzzle, "naive")
-        mrv_time = run_solver(puzzle, "mrv")
+        row_parts = [f"{i}:"]
+        for name, fn in solvers.items():
+            solved, t = time_solver(fn, puzzle)
+            ok = solved is not None
 
-        naive_total += naive_time
-        mrv_total += mrv_time
-        count += 1
+            if ok:
+                total_times[name] += t
+                solved_counts[name] += 1
+                times_by_solver[name].append(t)
+                row_parts.append(f"{name}={t:.4f}s")
+            else:
+                row_parts.append(f"{name}=FAIL")
 
-        print(f"{i}: naive={naive_time:.4f}s | mrv={mrv_time:.4f}s")
-
-    naive_avg = naive_total / count
-    mrv_avg = mrv_total/ count
-
-    faster = "MRV" if mrv_total < naive_total else "Naive"
-    speedup = (naive_total / mrv_total) if faster == "MRV" else (mrv_total / naive_total)
+        tested += 1
+        print(" | ".join(row_parts))
 
     print("\n-----Results-----")
-    print(f"Puzzles Solved: {count}")
-    print(f"Total Time:   naive={naive_total:.4f}s | mrv={mrv_total:.4f}s")
-    print(f"Average Time: naive={naive_avg:.6f}s | mrv={mrv_avg:.6f}s")
-    print(f"{faster} was faster by {speedup:.2f}x")
-        
+    print(f"Puzzles Tested: {tested}")
+    for name in solvers:
+        c = solved_counts[name]
+        total = total_times[name]
+        avgs[name] = (total / c)
+        print(f"{name}: solved={c}/{tested} total={total:.4f}s avg={avgs[name]:.6f}s")
+
+    visual = input("\nVisualize data? (y/n): ").strip().lower()
+    if visual == "y":
+        visualize_benchmark(times_by_solver, tested, avgs)
+
+def visualize_benchmark(times_by_solver, tested, avgs):
+    plt.figure()
+    for name, ts in times_by_solver.items():
+        xs = range(1, len(ts) + 1)
+        ys = ts
+        plt.plot(xs, ys, label=name)
+    plt.title(f"Sudoku Benchmark: Per-puzzle solve times (n={tested})")
+    plt.xlabel("Puzzle #")
+    plt.ylabel("Time (seconds)")
+    plt.legend()
+    plt.tight_layout()
+
+    plt.figure()
+    names, values = list(avgs.keys()), list(avgs.values())
+    plt.bar(names, values)
+    plt.title("Average solve time")
+    plt.xlabel("Solver")
+    plt.ylabel("Avg time (seconds)")
+    plt.tight_layout()
+    
+    plt.show()
+
 def main():
     print("Sudoku Solver:")
     while True:
@@ -67,7 +120,7 @@ def main():
         print("1. Enter Puzzle")
         print("2. Benchmark")
         print("3. Quit")
-        user_input = input()
+        user_input = input().strip()
 
         os.system("clear")
 
@@ -79,7 +132,7 @@ def main():
             while len(puzzle) != 81 or not puzzle.isdigit():
                 os.system("clear")
                 print("Invalid Puzzle")
-                attempt_again = input("Try again? (y or n): ")
+                attempt_again = input("Try again? (y or n): ").strip().lower()
                 if attempt_again == "y":
                     print("Enter puzzle again:")
                     print("(Example: 083020090000800100029300008000098700070000060006740000300006980002005000010030540)")
@@ -88,19 +141,28 @@ def main():
                     return
             
 
-            time_elapsed = run_solver(puzzle, print_board=True)
+            time_elapsed = run_solver(puzzle, solve_mrv, print_board=True)
             if time_elapsed != -1:
                 print(f"Time Elapsed: {time_elapsed:.4f}s")
+
         elif user_input == "2":
             print("How many puzzles do you want to test? (Default: 1000 and Maximum: 100000)")
-            test_count = input()
+            test_count = input().strip()
             if not test_count.isdigit() or int(test_count) < 0:
                 test_count = 1000
 
             print()
-            benchmark(int(test_count))
+
+            solvers = {
+                "naive": solve_naive,
+                "mrv": solve_mrv,
+                "sat": solve_sudoku,
+            }
+            benchmark(int(test_count), solvers)
+
         elif user_input == "3":
             return
+        
         else:
             print("Invalid Choice")
             print("Try Again")

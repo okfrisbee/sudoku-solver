@@ -53,7 +53,7 @@ class SudokuSolver():
 
     # Helper Methods
     def get_board(self):
-        return self.board
+        return "".join(str(cell) for cell in self.board)
 
     def index_to_coordinates(self, index):
         row, col = divmod(index, 9)
