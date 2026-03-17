@@ -7,10 +7,6 @@ from pysat.formula import CNF
 from pysat.solvers import Solver
 
 
-# ---------------------------
-# Variable mapping (DIMACS)
-# var(r,c,d) in 1..729
-# ---------------------------
 def var_id(r: int, c: int, d: int) -> int:
     """1-indexed r,c,d in {1..9} -> DIMACS var id in {1..729}."""
     return 81 * (r - 1) + 9 * (c - 1) + d
@@ -133,22 +129,3 @@ def solve_sudoku(board: str, solver_name: str = "glucose3") -> str:
             out_digits.append(str(found))
 
     return "".join(out_digits)
-
-
-# ---------------------------
-# Example usage
-# ---------------------------
-if __name__ == "__main__":
-    puzzle = (
-        "53..7...."
-        "6..195..."
-        ".98....6."
-        "8...6...3"
-        "4..8.3..1"
-        "7...2...6"
-        ".6....28."
-        "...419..5"
-        "....8..79"
-    )
-    solution = solve_sudoku(puzzle)
-    print(solution)

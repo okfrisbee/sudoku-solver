@@ -1,4 +1,4 @@
-class SudokuSolver():
+class CSPSolver:
     # Constructor and Setup
     def __init__(self, board):
         """Initialize a Sudoku board along with helper structures."""
@@ -27,7 +27,9 @@ class SudokuSolver():
         """Creates for each cell a set of indices of neighboring cells in the same row, column, or box."""
         for cell in range(81):
             row, col, box = self.index_to_coordinates(cell)
-            self.peers[cell] = (set(self.rows[row]) | set(self.cols[col]) | set(self.boxes[box])) - {cell}
+            self.peers[cell] = (
+                set(self.rows[row]) | set(self.cols[col]) | set(self.boxes[box])
+            ) - {cell}
 
     def build_candidates(self):
         """Creates a set of possible candidates for each cell if not already assigned."""
@@ -50,48 +52,40 @@ class SudokuSolver():
             if cell == 0:
                 self.unassigned.add(i)
 
-
     # Helper Methods
-    def get_board(self):
+    def get_board(self) -> str:
         return "".join(str(cell) for cell in self.board)
 
     def index_to_coordinates(self, index):
         row, col = divmod(index, 9)
         box = (row // 3) * 3 + (col // 3)
         return row, col, box
-    
-    def print_board(self):
-        for i, cell in enumerate(self.board):
-            if i % 9 == 0:
-                print()
-            print(cell, end=" ")
-        print()
 
-    def is_valid(self, index, value):
+    def is_valid(self, index, value) -> bool:
         for peer in self.peers[index]:
             if self.board[peer] == value:
                 return False
         return True
-    
-    def is_complete(self):
+
+    def is_complete(self) -> bool:
         return len(self.unassigned) == 0
 
-    def validate_board_state(self):
+    def validate_board_state(self) -> bool:
         if len(self.board) != 81 or not "".join(map(str, self.board)).isdigit():
             return False
-        
+
         houses = self.rows + self.cols + self.boxes
         for house in houses:
             seen = [False for _ in range(9)]
             for cell in house:
                 if self.board[cell] == 0:
                     continue
-                
+
                 if not seen[self.board[cell] - 1]:
                     seen[self.board[cell] - 1] = True
                 else:
                     return False
-                
+
         return True
 
     # Assignment Methods
@@ -101,7 +95,7 @@ class SudokuSolver():
         self.board[index] = value
         self.candidates[index] = {value}
         self.unassigned.remove(index)
-        
+
         valid = True
         removed_peers = []
         for peer in self.peers[index]:
@@ -118,13 +112,12 @@ class SudokuSolver():
         self.board[index] = 0
         self.candidates[index] = previous_candidates
         self.unassigned.add(index)
-        
+
         for peer in removed_peers:
             self.candidates[peer].add(value)
 
-
     # Sudoku Strategies
-    def eliminate_naked_singles(self):
+    def eliminate_naked_singles(self) -> int:
         "Automatically fills any cells that has exactly only one possible candidate."
         eliminated = 0
         for cell in list(self.unassigned):
@@ -133,7 +126,7 @@ class SudokuSolver():
                 eliminated += 1
         return eliminated
 
-    def eliminate_hidden_singles(self):
+    def eliminate_hidden_singles(self) -> int:
         """Fills cells with values that only appear in one place within a row, column, or box."""
         eliminated = 0
         houses = self.rows + self.cols + self.boxes
@@ -161,10 +154,10 @@ class SudokuSolver():
                     case _:
                         self.assign(cell, i + 1)
                         eliminated += 1
-                        
+
         return eliminated
 
-    def find_naked_pairs(self):
+    def find_naked_pairs(self) -> int:
         """Finds naked pairs and removes them from the candidates of other cells in the same house."""
         eliminated = 0
         houses = self.rows + self.cols + self.boxes
@@ -185,41 +178,27 @@ class SudokuSolver():
                 for cell in house:
                     if cell in two_celled:
                         continue
-                    
-                    if self.candidates[cell].intersection(self.candidates[two_celled[0]]):
+
+                    if self.candidates[cell].intersection(
+                        self.candidates[two_celled[0]]
+                    ):
                         self.candidates[cell] -= self.candidates[two_celled[0]]
                         eliminated += 1
 
         return eliminated
 
-
     # Heuristics and Search
     def find_mrv(self):
         """Returns the index of an unassigned cell with the fewest remaining candidates."""
-        return min(self.unassigned, key=lambda index: len(self.candidates[index]), default=None)
+        return min(
+            self.unassigned, key=lambda index: len(self.candidates[index]), default=None
+        )
 
-    def backtrack_naive(self, index=0):
-            if index == 81:
-                return True
-            
-            if self.board[index] != 0:
-                return self.backtrack_naive(index + 1)
-
-            for candidate in self.candidates[index]:
-                if not self.is_valid(index, candidate):
-                    continue
-                self.board[index] = candidate
-                if self.backtrack_naive(index + 1):
-                    return True
-                self.board[index] = 0
-            
-            return False
-
-    def backtrack(self):
+    def backtrack(self) -> bool:
         """Backtracking with MRV and forward checking."""
         if self.is_complete():
             return True
-        
+
         index = self.find_mrv()
         if index == None:
             return True
@@ -229,21 +208,28 @@ class SudokuSolver():
             if valid and self.backtrack():
                 return True
             self.unassign(index, candidate, previous, removed)
-        
+
         return False
-    
-    def solve(self):
+
+    def solve(self) -> bool:
         """Tries Sudoku strategies before searching for a complete solution."""
         while not self.is_complete():
             eliminated = self.eliminate_naked_singles()
-            
+
             if eliminated == 0:
                 eliminated += self.eliminate_hidden_singles()
-            
+
             if eliminated == 0:
                 eliminated += self.find_naked_pairs()
-                
+
             if eliminated == 0:
                 break
 
         return self.backtrack()
+
+
+def solve_csp(board: str) -> str | None:
+    solver = CSPSolver(board)
+    if not solver.validate_board_state():
+        return None
+    return solver.get_board() if solver.solve() else None
