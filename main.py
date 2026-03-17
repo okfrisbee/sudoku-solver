@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 from naive_solver import solve_naive
 from csp_solver import solve_csp
 from sat_solver import solve_sudoku
+from smt_solver import solve_smt as smt
 
 matplotlib.use("TkAgg")
 
@@ -21,6 +22,13 @@ def iterate_sudoku_puzzles(file):
 def solve_sat(board) -> str | None:
     try:
         return solve_sudoku(board, solver_name="cadical195")
+    except ValueError:
+        return None
+    
+
+def solve_smt(board) -> str | None:
+    try:
+        return smt(board)
     except ValueError:
         return None
 
@@ -40,8 +48,8 @@ def time_solver(solver_fn, puzzle):
     return solved, elapsed
 
 
-def run_solver(puzzle, solver_fn, show_board=False):
-    solved, elapsed = time_solver(solver_fn, puzzle)
+def run_solver(board, solver_fn, show_board=False):
+    solved, elapsed = time_solver(solver_fn, board)
 
     if solved is None:
         print("Puzzle is not solvable")
@@ -169,6 +177,7 @@ def main():
                 "naive": solve_naive,
                 "mrv": solve_csp,
                 "sat": solve_sat,
+                "smt": solve_smt,
             }
             benchmark(int(test_count), solvers)
 
