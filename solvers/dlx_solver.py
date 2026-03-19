@@ -1,19 +1,25 @@
-# dlx_solver.py
-
 from __future__ import annotations
+
+from typing import Iterable
+
+from board_utils import parse_board, board_size, format_board
 
 
 class Node:
+    __slots__ = ("left", "right", "up", "down", "column", "row_data")
+
     def __init__(self):
         self.left: Node = self
         self.right: Node = self
         self.up: Node = self
         self.down: Node = self
         self.column: ColumnNode | None = None
-        self.row_data: tuple[int, int, int] | None = None  # (r, c, n)
+        self.row_data: tuple[int, int, int] | None = None
 
 
 class ColumnNode(Node):
+    __slots__ = ("size", "name")
+
     def __init__(self, name: str):
         super().__init__()
         self.size = 0
@@ -35,12 +41,11 @@ class DancingLinks:
             col.right = self.header
             prev.right = col
             self.header.left = col
-
             prev = col
 
         self.solution: list[Node] = []
 
-    def add_row(self, row_data: tuple[int, int, int], col_indices: list[int]):
+    def add_row(self, row_data: tuple[int, int, int], col_indices: list[int]) -> None:
         first: Node | None = None
         prev: Node | None = None
 
@@ -50,14 +55,12 @@ class DancingLinks:
             node.column = col
             node.row_data = row_data
 
-            # Insert into column (at the bottom)
             node.down = col
             node.up = col.up
             col.up.down = node
             col.up = node
             col.size += 1
 
-            # Insert into row (circular doubly linked)
             if first is None:
                 first = node
                 prev = node
@@ -68,7 +71,7 @@ class DancingLinks:
                 first.left = node
                 prev = node
 
-    def cover(self, col: ColumnNode):
+    def cover(self, col: ColumnNode) -> None:
         col.right.left = col.left
         col.left.right = col.right
 
@@ -82,7 +85,7 @@ class DancingLinks:
                 node = node.right
             row = row.down
 
-    def uncover(self, col: ColumnNode):
+    def uncover(self, col: ColumnNode) -> None:
         row = col.up
         while row != col:
             node = row.left
@@ -147,95 +150,89 @@ class DancingLinks:
         return False
 
 
-def sudoku_exact_cover_columns() -> list[str]:
-    cols = []
+def sudoku_exact_cover_columns(n: int) -> list[str]:
+    cols: list[str] = []
 
-    # 1. Cell constraint: each cell gets one number
-    for r in range(9):
-        for c in range(9):
+    for r in range(n):
+        for c in range(n):
             cols.append(f"cell-{r}-{c}")
 
-    # 2. Row constraint: each row has each number once
-    for r in range(9):
-        for n in range(1, 10):
-            cols.append(f"row-{r}-{n}")
+    for r in range(n):
+        for value in range(1, n + 1):
+            cols.append(f"row-{r}-{value}")
 
-    # 3. Column constraint: each column has each number once
-    for c in range(9):
-        for n in range(1, 10):
-            cols.append(f"col-{c}-{n}")
+    for c in range(n):
+        for value in range(1, n + 1):
+            cols.append(f"col-{c}-{value}")
 
-    # 4. Box constraint: each 3x3 box has each number once
-    for b in range(9):
-        for n in range(1, 10):
-            cols.append(f"box-{b}-{n}")
+    for b in range(n):
+        for value in range(1, n + 1):
+            cols.append(f"box-{b}-{value}")
 
     return cols
 
 
-def box_index(r: int, c: int) -> int:
-    return (r // 3) * 3 + (c // 3)
+def box_index(r: int, c: int, box: int) -> int:
+    return (r // box) * box + (c // box)
 
 
-def candidate_to_columns(r: int, c: int, n: int) -> list[int]:
-    # Offsets
+def candidate_to_columns(r: int, c: int, value: int, n: int, box: int) -> list[int]:
     cell_offset = 0
-    row_offset = 81
-    col_offset = 162
-    box_offset = 243
+    row_offset = n * n
+    col_offset = 2 * n * n
+    box_offset = 3 * n * n
 
     return [
-        cell_offset + (r * 9 + c),
-        row_offset + (r * 9 + (n - 1)),
-        col_offset + (c * 9 + (n - 1)),
-        box_offset + (box_index(r, c) * 9 + (n - 1)),
+        cell_offset + (r * n + c),
+        row_offset + (r * n + (value - 1)),
+        col_offset + (c * n + (value - 1)),
+        box_offset + (box_index(r, c, box) * n + (value - 1)),
     ]
 
 
-def build_dlx(board: str) -> DancingLinks | None:
-    if len(board) != 81 or not board.isdigit():
-        raise ValueError("Board must be an 81-character digit string")
+def build_dlx(board: str | Iterable[int]) -> tuple[DancingLinks, list[int], int, int]:
+    values = parse_board(board)
+    n, box = board_size(values)
 
-    dlx = DancingLinks(sudoku_exact_cover_columns())
+    dlx = DancingLinks(sudoku_exact_cover_columns(n))
 
-    # Validate givens while building rows
-    for r in range(9):
-        for c in range(9):
-            ch = board[r * 9 + c]
-
-            if ch == "0":
-                for n in range(1, 10):
-                    dlx.add_row((r, c, n), candidate_to_columns(r, c, n))
+    for r in range(n):
+        for c in range(n):
+            current = values[r * n + c]
+            if current == 0:
+                for value in range(1, n + 1):
+                    dlx.add_row(
+                        (r, c, value),
+                        candidate_to_columns(r, c, value, n, box),
+                    )
             else:
-                n = int(ch)
-                dlx.add_row((r, c, n), candidate_to_columns(r, c, n))
+                dlx.add_row(
+                    (r, c, current),
+                    candidate_to_columns(r, c, current, n, box),
+                )
 
-    return dlx
+    return dlx, values, n, box
 
 
-def solve_dlx(board: str) -> str | None:
+def solve_dlx(board: str | Iterable[int]) -> str | None:
     try:
-        dlx = build_dlx(board)
+        dlx, values, n, _box = build_dlx(board)
     except ValueError:
         return None
 
-    # Pre-cover givens by selecting matching rows
-    givens = []
-    for r in range(9):
-        for c in range(9):
-            ch = board[r * 9 + c]
-            if ch != "0":
-                givens.append((r, c, int(ch)))
+    givens: list[tuple[int, int, int]] = []
+    for r in range(n):
+        for c in range(n):
+            value = values[r * n + c]
+            if value != 0:
+                givens.append((r, c, value))
 
-    # For each given, locate the corresponding row in the exact-cover structure
     for given in givens:
-        target_node = None
-
-        # Find the cell constraint column for this (r, c)
-        r, c, n = given
-        cell_col_idx = r * 9 + c
+        r, c, value = given
+        cell_col_idx = r * n + c
         col = dlx.columns[cell_col_idx]
 
+        target_node = None
         row = col.down
         while row != col:
             if row.row_data == given:
@@ -247,7 +244,6 @@ def solve_dlx(board: str) -> str | None:
             return None
 
         dlx.solution.append(target_node)
-
         node = target_node
         while True:
             dlx.cover(node.column)
@@ -258,15 +254,12 @@ def solve_dlx(board: str) -> str | None:
     if not dlx.search():
         return None
 
-    result = ["0"] * 81
+    result = [0] * (n * n)
     for row_node in dlx.solution:
-        r, c, n = row_node.row_data
-        result[r * 9 + c] = str(n)
+        r, c, value = row_node.row_data
+        result[r * n + c] = value
 
-    solved = "".join(result)
-
-    # Final sanity check
-    if "0" in solved:
+    if any(value == 0 for value in result):
         return None
 
-    return solved
+    return format_board(result)

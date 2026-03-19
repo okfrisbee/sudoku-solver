@@ -2,12 +2,13 @@ import os
 import time
 import matplotlib
 import matplotlib.pyplot as plt
+import board_utils
 
-from naive_solver import solve_naive
-from csp_solver import solve_csp
-from sat_solver import solve_sudoku
-from smt_solver import solve_smt as smt
-from dlx_solver import solve_dlx
+from solvers.naive_solver import solve_naive
+from solvers.csp_solver import solve_csp
+from solvers.sat_solver import solve_sudoku
+from solvers.smt_solver import solve_smt as smt
+from solvers.dlx_solver import solve_dlx
 
 matplotlib.use("TkAgg")
 
@@ -22,24 +23,16 @@ def iterate_sudoku_puzzles(file):
 
 def solve_sat(board) -> str | None:
     try:
-        return solve_sudoku(board, solver_name="cadical195")
+        return solve_sudoku(board)
     except ValueError:
         return None
-    
+
 
 def solve_smt(board) -> str | None:
     try:
         return smt(board)
     except ValueError:
         return None
-
-
-def print_board(board: str):
-    for i, cell in enumerate(board):
-        if i % 9 == 0:
-            print()
-        print(cell, end=" ")
-    print()
 
 
 def time_solver(solver_fn, puzzle):
@@ -58,12 +51,12 @@ def run_solver(board, solver_fn, show_board=False):
 
     if show_board:
         print("\nSolved Board: ")
-        print_board(solved)
+        board_utils.print_board(solved)
 
     return elapsed
 
 
-def benchmark(limit, solvers):
+def benchmark_9x9(limit, solvers):
     total_times = {name: 0.0 for name in solvers}
     solved_counts = {name: 0 for name in solvers}
     times_by_solver = {name: [] for name in solvers}
@@ -102,6 +95,31 @@ def benchmark(limit, solvers):
     if visual == "y":
         show_naive = input("Show naive solver on graph? (y/n): ").strip().lower() == "y"
         visualize_benchmark(times_by_solver, tested, avgs, show_naive=show_naive)
+
+
+def benchmark_100x100(solvers):
+    total_times = {name: 0.0 for name in solvers}
+    solved_counts = {name: 0 for name in solvers}
+    times_by_solver = {name: 0 for name in solvers}
+    avgs = {}
+
+    with open("puzzle100.txt") as f:
+        puzzle = f.read()
+
+    for name, fn in solvers.items():
+        solved, t = time_solver(fn, puzzle)
+        ok = solved is not None
+
+        if ok:
+            total_times[name] += t
+            solved_counts[name] += 1
+            times_by_solver[name] += t
+
+    print("\n-----Results-----")
+    for name in solvers:
+        c = solved_counts[name]
+        total = total_times[name]
+        print(f"{name}: solved={"True" if c == 1 else "False"} total={total:.4f}s")
 
 
 def visualize_benchmark(times_by_solver, tested, avgs, show_naive=True):
@@ -146,42 +164,40 @@ def main():
                 "(Example: 083020090000800100029300008000098700070000060006740000300006980002005000010030540)"
             )
             puzzle = input().strip()
-
-            while len(puzzle) != 81 or not puzzle.isdigit():
-                os.system("clear")
-                print("Invalid Puzzle")
-                attempt_again = input("Try again? (y or n): ").strip().lower()
-                if attempt_again == "y":
-                    print("Enter puzzle again:")
-                    print(
-                        "(Example: 083020090000800100029300008000098700070000060006740000300006980002005000010030540)"
-                    )
-                    puzzle = input().strip()
-                else:
-                    return
-
             time_elapsed = run_solver(puzzle, solve_csp, show_board=True)
             if time_elapsed != -1:
                 print(f"Time Elapsed: {time_elapsed:.4f}s")
 
         elif user_input == "2":
-            print(
-                "How many puzzles do you want to test? (Default: 1000 and Maximum: 100000)"
-            )
-            test_count = input().strip()
-            if not test_count.isdigit() or int(test_count) < 0:
-                test_count = 1000
+            print("1. 9x9\n2. 100x100")
+            user_input = input().strip()
 
-            print()
+            if user_input == "1":
+                print(
+                    "How many puzzles do you want to test? (Default: 1000 and Maximum: 100000)"
+                )
+                test_count = input().strip()
+                if not test_count.isdigit() or int(test_count) < 0:
+                    test_count = 1000
 
-            solvers = {
-                "naive": solve_naive,
-                "mrv": solve_csp,
-                "sat": solve_sat,
-                "smt": solve_smt,
-                "dlx": solve_dlx,
-            }
-            benchmark(int(test_count), solvers)
+                print()
+
+                solvers = {
+                    "naive": solve_naive,
+                    "mrv": solve_csp,
+                    "sat": solve_sat,
+                    "smt": solve_smt,
+                    "dlx": solve_dlx,
+                }
+                benchmark_9x9(int(test_count), solvers)
+
+            else:
+                solvers = {
+                    "mrv": solve_csp,
+                    "sat": solve_sat,
+                    "smt": solve_smt,
+                }
+                benchmark_100x100(solvers)
 
         elif user_input == "3":
             return

@@ -1,13 +1,17 @@
+import board_utils
+
+
 class CSPSolver:
     # Constructor and Setup
     def __init__(self, board):
         """Initialize a Sudoku board along with helper structures."""
-        self.board = [int(num) for num in board]
-        self.rows = [[] for _ in range(9)]
-        self.cols = [[] for _ in range(9)]
-        self.boxes = [[] for _ in range(9)]
-        self.peers = [set() for _ in range(81)]
-        self.candidates = [set() for _ in range(81)]
+        self.board = board_utils.parse_board(board)
+        self.size, self.box_size = board_utils.board_size(self.board)
+        self.rows = [[] for _ in range(self.size)]
+        self.cols = [[] for _ in range(self.size)]
+        self.boxes = [[] for _ in range(self.size)]
+        self.peers = [set() for _ in range(self.size * self.size)]
+        self.candidates = [set() for _ in range(self.size * self.size)]
         self.unassigned = set()
 
         self.build_houses()
@@ -17,7 +21,7 @@ class CSPSolver:
 
     def build_houses(self):
         """Creates lists of cell indices for each row, column, and box."""
-        for cell in range(81):
+        for cell in range(self.size * self.size):
             row, col, box = self.index_to_coordinates(cell)
             self.rows[row].append(cell)
             self.cols[col].append(cell)
@@ -25,7 +29,7 @@ class CSPSolver:
 
     def build_peers(self):
         """Creates for each cell a set of indices of neighboring cells in the same row, column, or box."""
-        for cell in range(81):
+        for cell in range(self.size * self.size):
             row, col, box = self.index_to_coordinates(cell)
             self.peers[cell] = (
                 set(self.rows[row]) | set(self.cols[col]) | set(self.boxes[box])
@@ -33,8 +37,8 @@ class CSPSolver:
 
     def build_candidates(self):
         """Creates a set of possible candidates for each cell if not already assigned."""
-        digits = set(range(1, 10))
-        for cell in range(81):
+        digits = set(range(1, self.size + 1))
+        for cell in range(self.size * self.size):
             current_cell_value = self.board[cell]
             if current_cell_value:
                 self.candidates[cell] = {current_cell_value}
@@ -54,11 +58,11 @@ class CSPSolver:
 
     # Helper Methods
     def get_board(self) -> str:
-        return "".join(str(cell) for cell in self.board)
+        return board_utils.format_board(self.board)
 
     def index_to_coordinates(self, index):
-        row, col = divmod(index, 9)
-        box = (row // 3) * 3 + (col // 3)
+        row, col = divmod(index, self.size)
+        box = (row // self.box_size) * self.box_size + (col // self.box_size)
         return row, col, box
 
     def is_valid(self, index, value) -> bool:
@@ -71,12 +75,12 @@ class CSPSolver:
         return len(self.unassigned) == 0
 
     def validate_board_state(self) -> bool:
-        if len(self.board) != 81 or not "".join(map(str, self.board)).isdigit():
+        if len(self.board) != self.size * self.size:
             return False
 
         houses = self.rows + self.cols + self.boxes
         for house in houses:
-            seen = [False for _ in range(9)]
+            seen = [False for _ in range(self.size)]
             for cell in house:
                 if self.board[cell] == 0:
                     continue
@@ -132,7 +136,7 @@ class CSPSolver:
         houses = self.rows + self.cols + self.boxes
 
         for house in houses:
-            seen = [None for _ in range(9)]
+            seen = [None for _ in range(self.size)]
 
             for cell in house:
                 if self.board[cell] != 0:
