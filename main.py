@@ -7,6 +7,7 @@ from naive_solver import solve_naive
 from csp_solver import solve_csp
 from sat_solver import solve_sudoku
 from smt_solver import solve_smt as smt
+from dlx_solver import solve_dlx
 
 matplotlib.use("TkAgg")
 
@@ -178,6 +179,7 @@ def main():
                 "mrv": solve_csp,
                 "sat": solve_sat,
                 "smt": solve_smt,
+                "dlx": solve_dlx,
             }
             benchmark(int(test_count), solvers)
 
