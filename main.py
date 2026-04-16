@@ -100,8 +100,7 @@ def benchmark_9x9(limit, solvers):
 def benchmark_100x100(solvers):
     total_times = {name: 0.0 for name in solvers}
     solved_counts = {name: 0 for name in solvers}
-    times_by_solver = {name: 0 for name in solvers}
-    avgs = {}
+    times_by_solver = {name: 0.0 for name in solvers}
 
     with open("puzzle100.txt") as f:
         puzzle = f.read()
