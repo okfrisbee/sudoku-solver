@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import time
 from typing import Iterable
 
 from board_utils import parse_board, board_size, format_board
+from solvers.metrics import SolverResult
 
 
 class Node:
@@ -31,6 +33,9 @@ class DancingLinks:
     def __init__(self, column_names: list[str]):
         self.header = ColumnNode("header")
         self.columns: list[ColumnNode] = []
+        self.assignments = 0
+        self.backtracks = 0
+        self.recursive_calls = 0
 
         prev = self.header
         for name in column_names:
@@ -117,6 +122,8 @@ class DancingLinks:
         return best
 
     def search(self) -> bool:
+        self.recursive_calls += 1
+
         if self.header.right == self.header:
             return True
 
@@ -129,6 +136,7 @@ class DancingLinks:
         row = col.down
         while row != col:
             self.solution.append(row)
+            self.assignments += 1
 
             node = row.right
             while node != row:
@@ -139,6 +147,7 @@ class DancingLinks:
                 return True
 
             self.solution.pop()
+            self.backtracks += 1
             node = row.left
             while node != row:
                 self.uncover(node.column)
@@ -214,11 +223,33 @@ def build_dlx(board: str | Iterable[int]) -> tuple[DancingLinks, list[int], int,
     return dlx, values, n, box
 
 
-def solve_dlx(board: str | Iterable[int]) -> str | None:
+def solve_dlx(board: str | Iterable[int]) -> SolverResult:
+    start = time.perf_counter()
+    setup_seconds = None
+    solve_seconds = None
+
     try:
+        setup_start = time.perf_counter()
         dlx, values, n, _box = build_dlx(board)
-    except ValueError:
-        return None
+        setup_seconds = time.perf_counter() - setup_start
+    except ValueError as exc:
+        return SolverResult(
+            solution=None,
+            status="failed",
+            runtime_seconds=time.perf_counter() - start,
+            setup_seconds=setup_seconds,
+            solve_seconds=solve_seconds,
+            error=str(exc),
+        )
+    except Exception as exc:
+        return SolverResult(
+            solution=None,
+            status="error",
+            runtime_seconds=time.perf_counter() - start,
+            setup_seconds=setup_seconds,
+            solve_seconds=solve_seconds,
+            error=str(exc),
+        )
 
     givens: list[tuple[int, int, int]] = []
     for r in range(n):
@@ -241,9 +272,20 @@ def solve_dlx(board: str | Iterable[int]) -> str | None:
             row = row.down
 
         if target_node is None:
-            return None
+            return SolverResult(
+                solution=None,
+                status="failed",
+                runtime_seconds=time.perf_counter() - start,
+                setup_seconds=setup_seconds,
+                solve_seconds=solve_seconds,
+                backtracks=dlx.backtracks,
+                assignments=dlx.assignments,
+                recursive_calls=dlx.recursive_calls,
+                error="Given could not be matched in exact-cover matrix.",
+            )
 
         dlx.solution.append(target_node)
+        dlx.assignments += 1
         node = target_node
         while True:
             dlx.cover(node.column)
@@ -251,8 +293,21 @@ def solve_dlx(board: str | Iterable[int]) -> str | None:
             if node == target_node:
                 break
 
-    if not dlx.search():
-        return None
+    solve_start = time.perf_counter()
+    solved = dlx.search()
+    solve_seconds = time.perf_counter() - solve_start
+
+    if not solved:
+        return SolverResult(
+            solution=None,
+            status="failed",
+            runtime_seconds=time.perf_counter() - start,
+            setup_seconds=setup_seconds,
+            solve_seconds=solve_seconds,
+            backtracks=dlx.backtracks,
+            assignments=dlx.assignments,
+            recursive_calls=dlx.recursive_calls,
+        )
 
     result = [0] * (n * n)
     for row_node in dlx.solution:
@@ -260,6 +315,25 @@ def solve_dlx(board: str | Iterable[int]) -> str | None:
         result[r * n + c] = value
 
     if any(value == 0 for value in result):
-        return None
+        return SolverResult(
+            solution=None,
+            status="failed",
+            runtime_seconds=time.perf_counter() - start,
+            setup_seconds=setup_seconds,
+            solve_seconds=solve_seconds,
+            backtracks=dlx.backtracks,
+            assignments=dlx.assignments,
+            recursive_calls=dlx.recursive_calls,
+            error="DLX solution did not fill every cell.",
+        )
 
-    return format_board(result)
+    return SolverResult(
+        solution=format_board(result),
+        status="solved",
+        runtime_seconds=time.perf_counter() - start,
+        setup_seconds=setup_seconds,
+        solve_seconds=solve_seconds,
+        backtracks=dlx.backtracks,
+        assignments=dlx.assignments,
+        recursive_calls=dlx.recursive_calls,
+    )

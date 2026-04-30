@@ -1,4 +1,7 @@
+import time
+
 import board_utils
+from solvers.metrics import SolverResult
 
 
 class CSPSolver:
@@ -13,6 +16,9 @@ class CSPSolver:
         self.peers = [set() for _ in range(self.size * self.size)]
         self.candidates = [set() for _ in range(self.size * self.size)]
         self.unassigned = set()
+        self.assignments = 0
+        self.backtracks = 0
+        self.recursive_calls = 0
 
         self.build_houses()
         self.build_peers()
@@ -95,6 +101,7 @@ class CSPSolver:
     # Assignment Methods
     def assign(self, index, value):
         """Assigns a value to a cell and updates the peers' candidate sets."""
+        self.assignments += 1
         previous_candidates = self.candidates[index]
         self.board[index] = value
         self.candidates[index] = {value}
@@ -200,6 +207,8 @@ class CSPSolver:
 
     def backtrack(self) -> bool:
         """Backtracking with MRV and forward checking."""
+        self.recursive_calls += 1
+
         if self.is_complete():
             return True
 
@@ -212,6 +221,7 @@ class CSPSolver:
             if valid and self.backtrack():
                 return True
             self.unassign(index, candidate, previous, removed)
+            self.backtracks += 1
 
         return False
 
@@ -232,8 +242,35 @@ class CSPSolver:
         return self.backtrack()
 
 
-def solve_csp(board: str) -> str | None:
-    solver = CSPSolver(board)
-    if not solver.validate_board_state():
-        return None
-    return solver.get_board() if solver.solve() else None
+def solve_csp(board: str) -> SolverResult:
+    start = time.perf_counter()
+
+    try:
+        solver = CSPSolver(board)
+        if not solver.validate_board_state():
+            return SolverResult(
+                solution=None,
+                status="failed",
+                runtime_seconds=time.perf_counter() - start,
+                backtracks=solver.backtracks,
+                assignments=solver.assignments,
+                recursive_calls=solver.recursive_calls,
+                error="Invalid board state.",
+            )
+
+        solved = solver.solve()
+        return SolverResult(
+            solution=solver.get_board() if solved else None,
+            status="solved" if solved else "failed",
+            runtime_seconds=time.perf_counter() - start,
+            backtracks=solver.backtracks,
+            assignments=solver.assignments,
+            recursive_calls=solver.recursive_calls,
+        )
+    except Exception as exc:
+        return SolverResult(
+            solution=None,
+            status="error",
+            runtime_seconds=time.perf_counter() - start,
+            error=str(exc),
+        )
