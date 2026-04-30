@@ -112,7 +112,7 @@ class CSPSolver:
         return previous_candidates, removed_peers, valid
 
     def unassign(self, index, value, previous_candidates, removed_peers):
-        """Unassigns a cell's value and restores the candidate set."""
+        """Removes a cell's value and restores the candidate set."""
         self.board[index] = 0
         self.candidates[index] = previous_candidates
         self.unassigned.add(index)
