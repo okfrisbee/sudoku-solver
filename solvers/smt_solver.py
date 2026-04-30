@@ -1,9 +1,10 @@
 import time
 
-from z3 import Int, Solver, Distinct, And, sat
+from z3 import sat
 
-from board_utils import parse_board, board_size, format_board
+from board_utils import format_board
 from solvers.metrics import SolverResult
+from sudoku_verifier import build_z3_sudoku_solver
 
 
 def solve_smt(board: str | list[int]) -> SolverResult:
@@ -13,39 +14,7 @@ def solve_smt(board: str | list[int]) -> SolverResult:
 
     try:
         setup_start = time.perf_counter()
-        values = parse_board(board)
-        n, box = board_size(values)
-
-        solver = Solver()
-        cells = [[Int(f"cell_{r}_{c}") for c in range(n)] for r in range(n)]
-
-        for r in range(n):
-            for c in range(n):
-                solver.add(And(cells[r][c] >= 1, cells[r][c] <= n))
-
-        for r in range(n):
-            solver.add(Distinct(cells[r]))
-
-        for c in range(n):
-            solver.add(Distinct([cells[r][c] for r in range(n)]))
-
-        for br in range(0, n, box):
-            for bc in range(0, n, box):
-                solver.add(
-                    Distinct(
-                        [
-                            cells[r][c]
-                            for r in range(br, br + box)
-                            for c in range(bc, bc + box)
-                        ]
-                    )
-                )
-
-        for i, v in enumerate(values):
-            if v != 0:
-                r, c = divmod(i, n)
-                solver.add(cells[r][c] == v)
-
+        solver, cells, _values, n, _box = build_z3_sudoku_solver(board)
         setup_seconds = time.perf_counter() - setup_start
 
         solve_start = time.perf_counter()
