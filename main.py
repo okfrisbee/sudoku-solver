@@ -1,7 +1,9 @@
 import csv
 import json
+import multiprocessing
 import os
 from pathlib import Path
+import queue
 import time
 import board_utils
 
@@ -56,6 +58,7 @@ CSV_FIELDS = [
     "error",
 ]
 BENCHMARK_RESULTS_DIR = "benchmark_results"
+BENCHMARK_SOLVER_TIMEOUT_SECONDS = 60
 ALL_DIFFICULTIES_OPTION = "all difficulties"
 
 
@@ -78,6 +81,46 @@ def safe_solve(solver_fn, puzzle) -> SolverResult:
             status="error",
             runtime_seconds=time.perf_counter() - start,
             error=str(exc),
+        )
+
+
+def _solve_worker(solver_fn, puzzle, result_queue):
+    result_queue.put(safe_solve(solver_fn, puzzle))
+
+
+def benchmark_solve_with_timeout(
+    solver_fn,
+    puzzle,
+    timeout_seconds=BENCHMARK_SOLVER_TIMEOUT_SECONDS,
+) -> SolverResult:
+    start = time.perf_counter()
+    context_name = "fork" if "fork" in multiprocessing.get_all_start_methods() else None
+    context = multiprocessing.get_context(context_name)
+    result_queue = context.Queue(maxsize=1)
+    process = context.Process(target=_solve_worker, args=(solver_fn, puzzle, result_queue))
+
+    process.start()
+    process.join(timeout_seconds)
+
+    if process.is_alive():
+        process.terminate()
+        process.join()
+        elapsed = time.perf_counter() - start
+        return SolverResult(
+            solution=None,
+            status="timeout",
+            runtime_seconds=elapsed,
+            error=f"Timed out after {timeout_seconds} seconds.",
+        )
+
+    try:
+        return result_queue.get_nowait()
+    except queue.Empty:
+        return SolverResult(
+            solution=None,
+            status="error",
+            runtime_seconds=time.perf_counter() - start,
+            error=f"Solver process exited with code {process.exitcode} without a result.",
         )
 
 
@@ -459,7 +502,13 @@ def puzzle_for_solver(puzzle, solver_name):
     return puzzle
 
 
-def benchmark_dataset(dataset_path, size, write_csv=False, solver_names=None):
+def benchmark_dataset(
+    dataset_path,
+    size,
+    write_csv=False,
+    solver_names=None,
+    timeout_seconds=BENCHMARK_SOLVER_TIMEOUT_SECONDS,
+):
     records = read_dataset(dataset_path, expected_size=size)
     if not records:
         print("\nDataset has no puzzles.")
@@ -489,7 +538,11 @@ def benchmark_dataset(dataset_path, size, write_csv=False, solver_names=None):
         puzzle = record["puzzle"]
         row_parts = [f"{i}:"]
         for name, fn in solvers.items():
-            result = safe_solve(fn, puzzle_for_solver(puzzle, name))
+            result = benchmark_solve_with_timeout(
+                fn,
+                puzzle_for_solver(puzzle, name),
+                timeout_seconds=timeout_seconds,
+            )
             results_by_solver[name].append(result)
             times_by_solver[name].append(result.runtime_seconds)
             if write_csv:

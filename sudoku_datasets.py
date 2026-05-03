@@ -13,8 +13,8 @@ from sudoku_generator import generate_puzzle
 DATASETS_DIR = "datasets"
 SUPPORTED_SIZES = (4, 9, 16, 25, 36, 49, 64, 81, 100)
 DIFFICULTY_PERCENT_RANGES = {
-    "easy": (0.55, 0.65),
-    "medium": (0.40, 0.50),
+    "easy": (0.75, 0.85),
+    "medium": (0.50, 0.60),
     "hard": (0.25, 0.35),
 }
 DIFFICULTIES = tuple(DIFFICULTY_PERCENT_RANGES) + ("mixed",)

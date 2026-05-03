@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 
-SolverStatus = Literal["solved", "failed", "error"]
+SolverStatus = Literal["solved", "failed", "error", "timeout"]
 
 
 @dataclass

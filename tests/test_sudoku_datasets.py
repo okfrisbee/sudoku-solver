@@ -5,6 +5,7 @@ from pathlib import Path
 import random
 from types import SimpleNamespace
 import tempfile
+import time
 import unittest
 from unittest.mock import Mock, patch
 
@@ -21,6 +22,11 @@ from sudoku_datasets import (
     write_dataset_records,
 )
 from sudoku_generator import generate_puzzle
+
+
+def slow_solver(_puzzle):
+    time.sleep(1)
+    return SolverResult(solution=None, status="failed", runtime_seconds=1.0)
 
 
 class SudokuDatasetTests(unittest.TestCase):
@@ -334,7 +340,6 @@ class BenchmarkDatasetSmokeTests(unittest.TestCase):
         import main
 
         record = generate_dataset_records(4, "easy", 1, seed=123, verify=False)[0]
-        calls = []
 
         with tempfile.TemporaryDirectory() as root:
             dataset_path_for_test = write_dataset_records(
@@ -345,7 +350,6 @@ class BenchmarkDatasetSmokeTests(unittest.TestCase):
             )
 
             def fake_csp(_puzzle):
-                calls.append("csp")
                 return SolverResult(
                     solution=record["solution"],
                     status="solved",
@@ -353,7 +357,6 @@ class BenchmarkDatasetSmokeTests(unittest.TestCase):
                 )
 
             def fake_sat(_puzzle):
-                calls.append("sat")
                 return SolverResult(
                     solution=record["solution"],
                     status="solved",
@@ -374,9 +377,35 @@ class BenchmarkDatasetSmokeTests(unittest.TestCase):
                             solver_names=["csp"],
                         )
 
-        self.assertEqual(calls, ["csp"])
         self.assertIn("csp=0.0010s", output.getvalue())
         self.assertNotIn("sat=", output.getvalue())
+
+    def test_benchmark_dataset_times_out_slow_solver(self):
+        import main
+
+        record = generate_dataset_records(4, "easy", 1, seed=123, verify=False)[0]
+
+        with tempfile.TemporaryDirectory() as root:
+            dataset_path_for_test = write_dataset_records(
+                [record],
+                size=4,
+                difficulty="easy",
+                root=root,
+            )
+
+            output = io.StringIO()
+            with patch("main.solvers_for_size", return_value={"slow": slow_solver}):
+                with patch("builtins.input", return_value="n"):
+                    with contextlib.redirect_stdout(output):
+                        main.benchmark_dataset(
+                            dataset_path_for_test,
+                            4,
+                            write_csv=False,
+                            timeout_seconds=0.05,
+                        )
+
+        self.assertIn("slow=TIMEOUT", output.getvalue())
+        self.assertIn("0/1", output.getvalue())
 
     def test_benchmark_menu_passes_csp_only_filter(self):
         import main
