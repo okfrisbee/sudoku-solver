@@ -1,4 +1,5 @@
 import csv
+import json
 import os
 from pathlib import Path
 import time
@@ -10,10 +11,12 @@ from solvers.dlx_solver import solve_dlx
 from solvers.metrics import SolverResult
 from sudoku_datasets import (
     DIFFICULTIES,
+    DIFFICULTY_PERCENT_RANGES,
     SUPPORTED_SIZES,
     generate_dataset,
     list_datasets,
     read_dataset,
+    verify_dataset,
 )
 
 try:
@@ -53,6 +56,7 @@ CSV_FIELDS = [
     "error",
 ]
 BENCHMARK_RESULTS_DIR = "benchmark_results"
+ALL_DIFFICULTIES_OPTION = "all difficulties"
 
 
 def unavailable_solver_result(name, exc):
@@ -107,25 +111,49 @@ def csv_row(benchmark_type, puzzle_index, solver_name, result, metadata=None):
     }
 
 
-def benchmark_csv_path(dataset_path, results_dir=BENCHMARK_RESULTS_DIR):
-    os.makedirs(results_dir, exist_ok=True)
-    stem = Path(dataset_path).stem
+def benchmark_data_directory(size, difficulty, results_dir=None):
+    if results_dir is None:
+        results_dir = BENCHMARK_RESULTS_DIR
+    return Path(results_dir) / f"{size}x{size}" / difficulty / "data"
+
+
+def benchmark_summary_directory(size, difficulty, results_dir=None):
+    if results_dir is None:
+        results_dir = BENCHMARK_RESULTS_DIR
+    return Path(results_dir) / f"{size}x{size}" / difficulty / "summary"
+
+
+def next_benchmark_run_paths(size, difficulty, results_dir=None):
+    data_dir = benchmark_data_directory(size, difficulty, results_dir)
+    summary_dir = benchmark_summary_directory(size, difficulty, results_dir)
+    data_dir.mkdir(parents=True, exist_ok=True)
+    summary_dir.mkdir(parents=True, exist_ok=True)
+
     index = 0
     while True:
-        path = Path(results_dir) / f"{stem}_results_{index}.csv"
-        if not path.exists():
-            return path
+        csv_path = data_dir / f"run_{index}.csv"
+        json_path = summary_dir / f"run_{index}.json"
+        if not csv_path.exists() and not json_path.exists():
+            return csv_path, json_path
         index += 1
 
 
-def write_benchmark_csv(rows, dataset_path):
-    os.makedirs(BENCHMARK_RESULTS_DIR, exist_ok=True)
-    filename = benchmark_csv_path(dataset_path)
+def write_benchmark_csv(rows, csv_path):
+    csv_path.parent.mkdir(parents=True, exist_ok=True)
+    filename = csv_path
     with open(filename, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=CSV_FIELDS)
         writer.writeheader()
         writer.writerows(rows)
     return filename
+
+
+def write_benchmark_summary_json(summary, json_path):
+    json_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(json_path, "w", encoding="utf-8") as f:
+        json.dump(summary, f, indent=2, sort_keys=True)
+        f.write("\n")
+    return json_path
 
 
 def average_present(results, attr):
@@ -221,7 +249,7 @@ def print_benchmark_summary(results_by_solver, tested):
 
 
 def prompt_write_csv():
-    return input("Save benchmark results to CSV? (y/n): ").strip().lower() == "y"
+    return input("Save benchmark results to CSV and JSON? (y/n): ").strip().lower() == "y"
 
 
 def prompt_choice(title, options):
@@ -249,9 +277,26 @@ def prompt_size():
 
 
 def prompt_difficulty():
-    selected = prompt_choice("\nSelect difficulty:", list(DIFFICULTIES))
+    selected = prompt_choice(
+        "\nSelect difficulty:",
+        list(DIFFICULTIES) + [ALL_DIFFICULTIES_OPTION],
+    )
     if selected is None:
         print("Invalid difficulty.")
+    return selected
+
+
+def prompt_verification_mode():
+    selected = prompt_choice("\nSelect verification mode:", ["solvable", "unique"])
+    if selected is None:
+        print("Invalid verification mode.")
+    return selected
+
+
+def prompt_benchmark_solver_mode():
+    selected = prompt_choice("\nSelect benchmark solver mode:", ["all", "csp only"])
+    if selected is None:
+        print("Invalid benchmark solver mode.")
     return selected
 
 
@@ -273,19 +318,37 @@ def generate_dataset_menu():
     if difficulty is None:
         return
 
-    count = prompt_positive_int("\nHow many puzzles should be generated?")
+    count_prompt = "\nHow many puzzles should be generated?"
+    if difficulty == ALL_DIFFICULTIES_OPTION:
+        count_prompt = "\nHow many puzzles should be generated per difficulty?"
+
+    count = prompt_positive_int(count_prompt)
     if count is None:
         return
 
-    print(f"\nGenerating {count} {size}x{size} {difficulty} puzzle(s)...")
+    difficulties = (
+        list(DIFFICULTY_PERCENT_RANGES)
+        if difficulty == ALL_DIFFICULTIES_OPTION
+        else [difficulty]
+    )
+    difficulty_label = (
+        "easy, medium, and hard"
+        if difficulty == ALL_DIFFICULTIES_OPTION
+        else difficulty
+    )
+
+    print(f"\nGenerating {count} {size}x{size} {difficulty_label} puzzle(s)...")
     start = time.perf_counter()
+    paths = []
     try:
-        path = generate_dataset(size, difficulty, count)
+        for selected_difficulty in difficulties:
+            paths.append(generate_dataset(size, selected_difficulty, count))
     except Exception as exc:
         print(f"Dataset generation failed: {exc}")
         return
 
-    print(f"Dataset written to: {path}")
+    for path in paths:
+        print(f"Dataset written to: {path}")
     print(f"Generation time: {time.perf_counter() - start:.4f}s")
 
 
@@ -313,10 +376,57 @@ def benchmark_menu():
     if dataset_path is None:
         return
 
+    solver_mode = prompt_benchmark_solver_mode()
+    if solver_mode is None:
+        return
+    solver_names = ["csp"] if solver_mode == "csp only" else None
+
     print()
     write_csv = prompt_write_csv()
     print()
-    benchmark_dataset(dataset_path, size, write_csv=write_csv)
+    benchmark_dataset(
+        dataset_path,
+        size,
+        write_csv=write_csv,
+        solver_names=solver_names,
+    )
+
+
+def verify_dataset_menu():
+    size = prompt_size()
+    if size is None:
+        return
+
+    dataset_path = select_dataset(size)
+    if dataset_path is None:
+        return
+
+    mode = prompt_verification_mode()
+    if mode is None:
+        return
+
+    print(f"\nVerifying {dataset_path} with mode={mode}...")
+    try:
+        summary = verify_dataset(dataset_path, expected_size=size, mode=mode)
+    except Exception as exc:
+        print(f"Dataset verification failed: {exc}")
+        return
+
+    print("\n-----Verification Results-----")
+    print(f"Dataset: {dataset_path}")
+    print(f"Mode: {summary.mode}")
+    print(f"Puzzles Checked: {summary.total}")
+    print(f"Valid: {summary.valid_count}")
+    print(f"Invalid: {summary.invalid_count}")
+    print(f"Verification time: {summary.runtime_seconds:.4f}s")
+
+    if summary.failures:
+        print("\nFailures:")
+        for failure in summary.failures:
+            print(
+                f"{failure.record_number}: "
+                f"id={failure.record_id} error={failure.error or 'verification failed'}"
+            )
 
 
 def run_solver(board, solver_fn, show_board=False):
@@ -340,24 +450,35 @@ def solvers_for_size(size):
         "smt": solve_smt,
         "dlx": solve_dlx,
     }
-    if size == 9:
+    if size in {4, 9, 16}:
         return {"naive": solve_naive, **solvers}
     return solvers
 
 
 def puzzle_for_solver(puzzle, solver_name):
-    if solver_name != "naive":
-        return puzzle
-    return "".join(str(value) for value in board_utils.parse_board(puzzle))
+    return puzzle
 
 
-def benchmark_dataset(dataset_path, size, write_csv=False):
+def benchmark_dataset(dataset_path, size, write_csv=False, solver_names=None):
     records = read_dataset(dataset_path, expected_size=size)
     if not records:
         print("\nDataset has no puzzles.")
         return
 
     solvers = solvers_for_size(size)
+    if solver_names is not None:
+        requested = set(solver_names)
+        solvers = {
+            name: solver
+            for name, solver in solvers.items()
+            if name in requested
+        }
+        missing = requested - set(solvers)
+        if missing:
+            print(f"\nNo solver found for: {', '.join(sorted(missing))}")
+            return
+
+    difficulty = Path(dataset_path).stem
     csv_rows = []
     results_by_solver = {name: [] for name in solvers}
     times_by_solver = {name: [] for name in solvers}
@@ -395,14 +516,36 @@ def benchmark_dataset(dataset_path, size, write_csv=False):
         tested += 1
         print(" | ".join(row_parts))
 
-    print_benchmark_summary(results_by_solver, tested)
+    summary_rows = benchmark_summary_rows(results_by_solver, tested)
+    print("\n-----Results-----")
+    print(f"Puzzles Tested: {tested}\n")
+    print_summary_table(summary_rows)
     if write_csv:
-        csv_file = write_benchmark_csv(csv_rows, dataset_path)
+        csv_path, json_path = next_benchmark_run_paths(size, difficulty)
+        csv_file = write_benchmark_csv(csv_rows, csv_path)
+        summary_file = write_benchmark_summary_json(
+            {
+                "dataset": {
+                    "path": str(dataset_path),
+                    "name": dataset_name,
+                    "size": size,
+                    "difficulty": difficulty,
+                    "puzzle_count": len(records),
+                },
+                "tested": tested,
+                "solvers": list(solvers),
+                "summary_rows": summary_rows,
+            },
+            json_path,
+        )
         print(f"\nCSV written to: {csv_file}")
+        print(f"JSON summary written to: {summary_file}")
 
     visual = input("\nVisualize data? (y/n): ").strip().lower()
     if visual == "y":
-        show_naive = input("Show naive solver on graph? (y/n): ").strip().lower() == "y"
+        show_naive = True
+        if "naive" in times_by_solver:
+            show_naive = input("Show naive solver on graph? (y/n): ").strip().lower() == "y"
         avgs = {
             name: (sum(result.runtime_seconds for result in results) / tested)
             if tested
@@ -448,8 +591,9 @@ def main():
         print("\n-----Menu-----")
         print("1. Enter Puzzle")
         print("2. Generate Dataset")
-        print("3. Benchmark")
-        print("4. Quit")
+        print("3. Verify Dataset")
+        print("4. Benchmark")
+        print("5. Quit")
         user_input = input().strip()
 
         if user_input == "1":
@@ -470,9 +614,13 @@ def main():
 
         elif user_input == "3":
             os.system("clear")
-            benchmark_menu()
+            verify_dataset_menu()
 
         elif user_input == "4":
+            os.system("clear")
+            benchmark_menu()
+
+        elif user_input == "5":
             return
 
         else:

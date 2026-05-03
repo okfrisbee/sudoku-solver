@@ -64,7 +64,7 @@ class SudokuGeneratorTests(unittest.TestCase):
         self.assertEqual(generated.target_clues, 6)
         self.assertEqual(sum(1 for value in parse_board(generated.puzzle) if value), 6)
         self.assertTrue(generated.verification.valid)
-        self.assertEqual(generated.verification.mode, "solvable")
+        self.assertEqual(generated.verification.mode, "derived")
 
     def test_generate_9x9_smoke(self):
         generated = generate_puzzle(size=9, clues=80, seed=123)

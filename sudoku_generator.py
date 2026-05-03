@@ -3,9 +3,24 @@ from __future__ import annotations
 from dataclasses import dataclass
 from math import isqrt
 import random
+from typing import TYPE_CHECKING
 
 from board_utils import format_board, parse_board
-from sudoku_verifier import VerificationResult, verify_puzzle
+
+if TYPE_CHECKING:
+    from sudoku_verifier import VerificationResult
+
+
+@dataclass
+class DerivedVerificationResult:
+    valid: bool
+    mode: str
+    solution: str | None
+    solution_count: int | None
+    runtime_seconds: float
+    setup_seconds: float | None = None
+    solve_seconds: float | None = None
+    error: str | None = None
 
 
 @dataclass
@@ -16,7 +31,7 @@ class GeneratedPuzzle:
     box_size: int
     target_clues: int
     actual_clues: int
-    verification: VerificationResult
+    verification: VerificationResult | DerivedVerificationResult
 
 
 def _validate_size(size: int) -> tuple[int, int]:
@@ -81,17 +96,18 @@ def generate_puzzle(
     for index in indexes[: n * n - clues]:
         puzzle_values[index] = 0
 
-    verification = (
-        verify_puzzle(puzzle_values, mode="solvable")
-        if verify
-        else VerificationResult(
+    if verify:
+        from sudoku_verifier import verify_puzzle
+
+        verification = verify_puzzle(puzzle_values, mode="solvable")
+    else:
+        verification = DerivedVerificationResult(
             valid=True,
-            mode="solvable",
+            mode="derived",
             solution=solution,
             solution_count=None,
             runtime_seconds=0.0,
         )
-    )
 
     return GeneratedPuzzle(
         puzzle=format_board(puzzle_values),
