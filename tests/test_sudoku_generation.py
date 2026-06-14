@@ -1,8 +1,7 @@
 import unittest
 
+from benchmark import generate_pattern_solution, generate_puzzle, verify_puzzle
 from board_utils import parse_board
-from sudoku_datasets import generate_pattern_solution, generate_puzzle
-from sudoku_verifier import verify_puzzle
 
 
 SOLVED_4X4 = "1 2 3 4 3 4 1 2 2 1 4 3 4 3 2 1"

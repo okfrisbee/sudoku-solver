@@ -2,47 +2,20 @@ import os
 import time
 
 from benchmark import (
+    DIFFICULTIES,
+    DIFFICULTY_PERCENT_RANGES,
     benchmark_dataset,
+    generate_dataset,
     prompt_benchmark_solver_mode,
     prompt_write_csv,
     run_solver,
-)
-from solvers.csp_solver import solve_csp
-from sudoku_datasets import (
-    DIFFICULTIES,
-    DIFFICULTY_PERCENT_RANGES,
-    SUPPORTED_SIZES,
-    generate_dataset,
-    list_datasets,
     verify_dataset,
 )
+from cli_helpers import prompt_choice, prompt_size, select_dataset
+from solvers.csp_solver import solve_csp
 
 
 ALL_DIFFICULTIES_OPTION = "all difficulties"
-
-
-def prompt_choice(title, options):
-    print(title)
-    for index, option in enumerate(options, start=1):
-        print(f"{index}. {option}")
-
-    choice = input().strip()
-    if not choice.isdigit():
-        return None
-
-    index = int(choice)
-    if index < 1 or index > len(options):
-        return None
-    return options[index - 1]
-
-
-def prompt_size():
-    options = [f"{size}x{size}" for size in SUPPORTED_SIZES]
-    selected = prompt_choice("\nSelect puzzle size:", options)
-    if selected is None:
-        print("Invalid size.")
-        return None
-    return int(selected.split("x", 1)[0])
 
 
 def prompt_difficulty():
@@ -112,23 +85,6 @@ def generate_dataset_menu():
     for path in paths:
         print(f"Dataset written to: {path}")
     print(f"Generation time: {time.perf_counter() - start:.4f}s")
-
-
-def select_dataset(size):
-    datasets = list_datasets(size)
-    if not datasets:
-        print(f"\nNo datasets found for {size}x{size}. Generate a dataset first.")
-        return None
-
-    options = [path.name for path in datasets]
-    selected = prompt_choice("\nSelect dataset:", options)
-    if selected is None:
-        print("Invalid dataset.")
-        return None
-
-    return datasets[options.index(selected)]
-
-
 def benchmark_menu():
     size = prompt_size()
     if size is None:

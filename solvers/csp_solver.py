@@ -71,12 +71,6 @@ class CSPSolver:
         box = (row // self.box_size) * self.box_size + (col // self.box_size)
         return row, col, box
 
-    def is_valid(self, index, value) -> bool:
-        for peer in self.peers[index]:
-            if self.board[peer] == value:
-                return False
-        return True
-
     def is_complete(self) -> bool:
         return len(self.unassigned) == 0
 

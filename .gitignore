@@ -2,6 +2,7 @@
 __pycache__/
 .codex
 benchmark_results_*.csv
-benchmark_results/
-datasets/
+benchmark/results/
+benchmark/datasets/
 .agents/
+tests/

@@ -6,12 +6,14 @@ import queue
 import time
 
 import board_utils
+from cli_helpers import prompt_choice, prompt_size, select_dataset
+from .generation import read_dataset
+from .visualization import visualize_benchmark
 
 from solvers.csp_solver import solve_csp
 from solvers.dlx_solver import solve_dlx
 from solvers.metrics import SolverResult
 from solvers.naive_solver import solve_naive
-from sudoku_datasets import SUPPORTED_SIZES, list_datasets, read_dataset
 
 
 try:
@@ -50,7 +52,7 @@ CSV_FIELDS = [
     "solution_found",
     "error",
 ]
-BENCHMARK_RESULTS_DIR = "benchmark_results"
+BENCHMARK_RESULTS_DIR = "benchmark/results"
 BENCHMARK_SOLVER_TIMEOUT_SECONDS = 60
 
 
@@ -276,45 +278,6 @@ def print_summary_table(rows):
     print(table.to_string(index=False))
 
 
-def prompt_choice(title, options):
-    print(title)
-    for index, option in enumerate(options, start=1):
-        print(f"{index}. {option}")
-
-    choice = input().strip()
-    if not choice.isdigit():
-        return None
-
-    index = int(choice)
-    if index < 1 or index > len(options):
-        return None
-    return options[index - 1]
-
-
-def prompt_size():
-    options = [f"{size}x{size}" for size in SUPPORTED_SIZES]
-    selected = prompt_choice("\nSelect puzzle size:", options)
-    if selected is None:
-        print("Invalid size.")
-        return None
-    return int(selected.split("x", 1)[0])
-
-
-def select_dataset(size):
-    datasets = list_datasets(size)
-    if not datasets:
-        print(f"\nNo datasets found for {size}x{size}. Generate a dataset first.")
-        return None
-
-    options = [path.name for path in datasets]
-    selected = prompt_choice("\nSelect dataset:", options)
-    if selected is None:
-        print("Invalid dataset.")
-        return None
-
-    return datasets[options.index(selected)]
-
-
 def prompt_benchmark_solver_mode():
     selected = prompt_choice("\nSelect benchmark solver mode:", ["all", "csp only"])
     if selected is None:
@@ -350,12 +313,6 @@ def solvers_for_size(size):
     if size in {4, 9, 16}:
         return {"naive": solve_naive, **solvers}
     return solvers
-
-
-def puzzle_for_solver(puzzle, solver_name):
-    return puzzle
-
-
 def benchmark_dataset(
     dataset_path,
     size,
@@ -394,7 +351,7 @@ def benchmark_dataset(
         for name, fn in solvers.items():
             result = benchmark_solve_with_timeout(
                 fn,
-                puzzle_for_solver(puzzle, name),
+                puzzle,
                 timeout_seconds=timeout_seconds,
             )
             results_by_solver[name].append(result)
@@ -460,36 +417,6 @@ def benchmark_dataset(
             for name, results in results_by_solver.items()
         }
         visualize_benchmark(times_by_solver, tested, avgs, show_naive=show_naive)
-
-
-def visualize_benchmark(times_by_solver, tested, avgs, show_naive=True):
-    import matplotlib
-    import matplotlib.pyplot as plt
-
-    matplotlib.use("TkAgg")
-
-    plt.figure()
-    for name, ts in times_by_solver.items():
-        if name == "naive" and not show_naive:
-            continue
-        xs = range(1, len(ts) + 1)
-        ys = ts
-        plt.plot(xs, ys, label=name)
-    plt.title(f"Sudoku Benchmark: Per-puzzle solve times (n={tested})")
-    plt.xlabel("Puzzle #")
-    plt.ylabel("Time (seconds)")
-    plt.legend()
-    plt.tight_layout()
-
-    plt.figure()
-    names, values = list(avgs.keys()), list(avgs.values())
-    plt.bar(names, values)
-    plt.title("Average solve time")
-    plt.xlabel("Solver")
-    plt.ylabel("Avg time (seconds)")
-    plt.tight_layout()
-
-    plt.show()
 
 
 def benchmark_menu():

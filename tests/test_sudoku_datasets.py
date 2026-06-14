@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from unittest.mock import Mock, patch
 
-from sudoku_datasets import (
+from benchmark import (
     DIFFICULTY_PERCENT_RANGES,
     clue_count,
     dataset_path,
@@ -108,7 +108,7 @@ class SudokuDatasetTests(unittest.TestCase):
     def test_dataset_path_uses_stable_size_and_difficulty(self):
         self.assertEqual(
             dataset_path(9, "medium"),
-            Path("datasets") / "9x9" / "medium.jsonl",
+            Path("benchmark/datasets") / "9x9" / "medium.jsonl",
         )
 
     def test_dataset_writer_overwrites_same_size_and_difficulty(self):
@@ -170,7 +170,10 @@ class SudokuGenerationPolicyTests(unittest.TestCase):
         )
         fake_verifier = SimpleNamespace(verify_puzzle=verify)
 
-        with patch.dict("sys.modules", {"sudoku_verifier": fake_verifier}):
+        with patch.dict(
+            "sys.modules",
+            {"benchmark.generation.sudoku_verifier": fake_verifier},
+        ):
             generated = generate_puzzle(size=4, clues=6, seed=123, verify=True)
 
         self.assertEqual(generated.actual_clues, 6)
@@ -187,7 +190,10 @@ class SudokuGenerationPolicyTests(unittest.TestCase):
         verify = Mock(side_effect=AssertionError("verification should be explicit"))
         fake_verifier = SimpleNamespace(verify_puzzle=verify)
 
-        with patch.dict("sys.modules", {"sudoku_verifier": fake_verifier}):
+        with patch.dict(
+            "sys.modules",
+            {"benchmark.generation.sudoku_verifier": fake_verifier},
+        ):
             records = generate_dataset_records(4, "easy", 2, seed=123)
 
         self.assertEqual(len(records), 2)
@@ -209,7 +215,10 @@ class SudokuGenerationPolicyTests(unittest.TestCase):
         )
         fake_verifier = SimpleNamespace(verify_puzzle=verify)
 
-        with patch.dict("sys.modules", {"sudoku_verifier": fake_verifier}):
+        with patch.dict(
+            "sys.modules",
+            {"benchmark.generation.sudoku_verifier": fake_verifier},
+        ):
             summary = verify_dataset_records(records, mode="unique")
 
         self.assertEqual(summary.mode, "unique")
@@ -230,7 +239,7 @@ class MainDatasetMenuSmokeTests(unittest.TestCase):
 
         def fake_generate_dataset(size, difficulty, count):
             generated.append((size, difficulty, count))
-            return Path(f"datasets/{size}x{size}/{difficulty}.jsonl")
+            return Path(f"benchmark/datasets/{size}x{size}/{difficulty}.jsonl")
 
         output = io.StringIO()
         with patch("main.prompt_size", return_value=4):
