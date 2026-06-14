@@ -16,12 +16,12 @@ from sudoku_datasets import (
     dataset_path,
     expand_difficulties,
     generate_dataset_records,
+    generate_puzzle,
     list_datasets,
     read_dataset,
     verify_dataset_records,
     write_dataset_records,
 )
-from sudoku_generator import generate_puzzle
 
 
 def slow_solver(_puzzle):

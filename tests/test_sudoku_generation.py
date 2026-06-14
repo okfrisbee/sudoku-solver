@@ -1,7 +1,7 @@
 import unittest
 
 from board_utils import parse_board
-from sudoku_generator import generate_pattern_solution, generate_puzzle
+from sudoku_datasets import generate_pattern_solution, generate_puzzle
 from sudoku_verifier import verify_puzzle
 
 
