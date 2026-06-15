@@ -7,26 +7,15 @@ from z3 import And, Distinct, Int, Or, Solver, sat
 
 from board_utils import board_size, format_board, parse_board
 
-
+# Redundant
 ValidityMode = Literal["solvable", "unique"]
+VerificationMode = Literal["solvable", "unique", "derived"]
 
 
 @dataclass
 class VerificationResult:
     valid: bool
-    mode: ValidityMode
-    solution: str | None
-    solution_count: int | None
-    runtime_seconds: float
-    setup_seconds: float | None = None
-    solve_seconds: float | None = None
-    error: str | None = None
-
-
-@dataclass
-class DerivedVerificationResult:
-    valid: bool
-    mode: str
+    mode: VerificationMode
     solution: str | None
     solution_count: int | None
     runtime_seconds: float
@@ -244,15 +233,16 @@ def verify_dataset(
 
 
 def verify_dataset_menu():
-    from cli_helpers import prompt_choice, prompt_size
-    from .generation import select_dataset
+    from cli_helpers import prompt_choice
+    from .generation import dataset_size_from_path, select_dataset
 
-    size = prompt_size()
-    if size is None:
-        return
-
-    dataset_path = select_dataset(size)
+    dataset_path = select_dataset()
     if dataset_path is None:
+        return
+    try:
+        size = dataset_size_from_path(dataset_path)
+    except ValueError as exc:
+        print(exc)
         return
 
     mode = prompt_choice("\nSelect verification mode:", ["solvable", "unique"])

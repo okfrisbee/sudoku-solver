@@ -3,8 +3,8 @@ from pathlib import Path
 import queue
 import time
 
-from cli_helpers import prompt_choice, prompt_size
-from generator import read_dataset, select_dataset
+from cli_helpers import prompt_choice
+from generator import dataset_size_from_path, read_dataset, select_dataset
 from .reporting import (
     benchmark_summary_rows,
     csv_row,
@@ -115,7 +115,16 @@ def benchmark_dataset(
             print(f"\nNo solver found for: {', '.join(sorted(missing))}")
             return None
 
-    difficulty = Path(dataset_path).stem
+    record_difficulties = {
+        record.get("difficulty", "")
+        for record in records
+        if record.get("difficulty")
+    }
+    difficulty = (
+        next(iter(record_difficulties))
+        if len(record_difficulties) == 1
+        else Path(dataset_path).stem
+    )
     csv_rows = []
     results_by_solver = {name: [] for name in solvers}
     times_by_solver = {name: [] for name in solvers}
@@ -195,12 +204,13 @@ def benchmark_dataset(
 
 
 def benchmark_menu():
-    size = prompt_size()
-    if size is None:
-        return
-
-    dataset_path = select_dataset(size)
+    dataset_path = select_dataset()
     if dataset_path is None:
+        return
+    try:
+        size = dataset_size_from_path(dataset_path)
+    except ValueError as exc:
+        print(exc)
         return
 
     solver_mode = prompt_choice("\nSelect benchmark solver mode:", ["all", "csp only"])

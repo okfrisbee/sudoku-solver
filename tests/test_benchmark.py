@@ -81,7 +81,7 @@ class BenchmarkTests(unittest.TestCase):
                 return_value={"naive": fake_solver},
             ):
                 benchmark_module.benchmark_dataset(
-                    Path("data/datasets/16x16/easy.jsonl"),
+                    Path("data/datasets/16x16_easy_1.jsonl"),
                     16,
                     write_csv=False,
                 )
@@ -262,22 +262,22 @@ class BenchmarkTests(unittest.TestCase):
     def test_benchmark_menu_passes_csp_only_filter(self):
         import main
 
-        selected_path = Path("data/datasets/4x4/easy.jsonl")
+        selected_path = Path("data/datasets/4x4_easy_1.jsonl")
         benchmark_result = {"tested": 1}
 
-        with patch("benchmark.runner.prompt_size", return_value=4):
-            with patch("benchmark.runner.select_dataset", return_value=selected_path):
-                with patch(
-                    "benchmark.runner.prompt_choice",
-                    return_value="csp only",
-                ):
-                    with patch("builtins.input", return_value="n"):
-                        with patch(
-                            "benchmark.runner.benchmark_dataset",
-                            return_value=benchmark_result,
-                        ) as run_benchmark:
-                            result = main.benchmark_menu()
+        with patch("benchmark.runner.select_dataset", return_value=selected_path) as select:
+            with patch(
+                "benchmark.runner.prompt_choice",
+                return_value="csp only",
+            ):
+                with patch("builtins.input", return_value="n"):
+                    with patch(
+                        "benchmark.runner.benchmark_dataset",
+                        return_value=benchmark_result,
+                    ) as run_benchmark:
+                        result = main.benchmark_menu()
 
+        select.assert_called_once_with()
         run_benchmark.assert_called_once_with(
             selected_path,
             4,

@@ -2,14 +2,13 @@ from dataclasses import dataclass
 import json
 from pathlib import Path
 import random
+import re
 import time
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from board_utils import format_board, parse_board, validate_size
 from cli_helpers import prompt_choice, prompt_positive_int, prompt_size
-
-if TYPE_CHECKING:
-    from .verification import DerivedVerificationResult, VerificationResult
+from .verification import VerificationResult, verify_puzzle
 
 
 DATASETS_DIR = "data/datasets"
@@ -42,7 +41,7 @@ class GeneratedPuzzle:
     box_size: int
     target_clues: int
     actual_clues: int
-    verification: "VerificationResult | DerivedVerificationResult"
+    verification: VerificationResult
 
 
 def generate_pattern_solution(size: int = 9, seed: int | None = None) -> str:
@@ -97,13 +96,9 @@ def generate_puzzle(
         puzzle_values[index] = 0
 
     if verify:
-        from .verification import verify_puzzle
-
         verification = verify_puzzle(puzzle_values, mode="solvable")
     else:
-        from .verification import DerivedVerificationResult
-
-        verification = DerivedVerificationResult(
+        verification = VerificationResult(
             valid=True,
             mode="derived",
             solution=solution,
@@ -150,26 +145,35 @@ def expand_difficulties(difficulty: str, count: int) -> list[str]:
     return expanded
 
 
-def dataset_directory(size: int, root: str | Path = DATASETS_DIR) -> Path:
-    validate_size(size)
-    return Path(root) / f"{size}x{size}"
-
-
 def dataset_path(
     size: int,
     difficulty: str,
+    count: int,
     root: str | Path = DATASETS_DIR,
 ) -> Path:
+    validate_size(size)
     if difficulty not in DIFFICULTIES:
         raise ValueError(f"Unsupported difficulty: {difficulty}")
-    return dataset_directory(size, root) / f"{difficulty}.jsonl"
+    if count < 0:
+        raise ValueError("Count cannot be negative")
+    return Path(root) / f"{size}x{size}_{difficulty}_{count}.jsonl"
 
 
-def list_datasets(size: int, root: str | Path = DATASETS_DIR) -> list[Path]:
-    directory = dataset_directory(size, root)
+def list_datasets(size: int | None = None, root: str | Path = DATASETS_DIR) -> list[Path]:
+    if size is not None:
+        validate_size(size)
+    directory = Path(root)
     if not directory.exists():
         return []
-    return sorted(directory.glob("*.jsonl"))
+    pattern = f"{size}x{size}_*.jsonl" if size is not None else "*.jsonl"
+    return sorted(directory.glob(pattern))
+
+
+def dataset_size_from_path(path: str | Path) -> int:
+    match = re.match(r"^(\d+)x\1_", Path(path).name)
+    if not match:
+        raise ValueError(f"Cannot determine dataset size from filename: {path}")
+    return int(match.group(1))
 
 
 def write_dataset_records(
@@ -178,11 +182,12 @@ def write_dataset_records(
     difficulty: str,
     root: str | Path = DATASETS_DIR,
 ) -> Path:
-    directory = dataset_directory(size, root)
+    validate_size(size)
+    directory = Path(root)
     directory.mkdir(parents=True, exist_ok=True)
     if difficulty not in DIFFICULTIES:
         raise ValueError(f"Unsupported difficulty: {difficulty}")
-    path = directory / f"{difficulty}.jsonl"
+    path = dataset_path(size, difficulty, len(records), root=root)
 
     with open(path, "w", encoding="utf-8") as f:
         for record in records:
@@ -283,27 +288,25 @@ def generate_dataset(
     return write_dataset_records(records, size, difficulty, root=root)
 
 
-ALL_DIFFICULTIES_OPTION = "all difficulties"
-
-
 def prompt_difficulty():
     selected = prompt_choice(
         "\nSelect difficulty:",
-        list(DIFFICULTIES) + [ALL_DIFFICULTIES_OPTION],
+        list(DIFFICULTIES),
     )
     if selected is None:
         print("Invalid difficulty.")
     return selected
 
 
-def select_dataset(size):
+def select_dataset(size: int | None = None):
     datasets = list_datasets(size)
     if not datasets:
-        print(f"\nNo datasets found for {size}x{size}. Generate a dataset first.")
+        size_label = f" for {size}x{size}" if size is not None else ""
+        print(f"\nNo datasets found{size_label}. Generate a dataset first.")
         return None
 
     options = [path.name for path in datasets]
-    selected = prompt_choice("\nSelect dataset:", options)
+    selected = prompt_choice("\nAvailable datasets:", options)
     if selected is None:
         print("Invalid dataset.")
         return None
@@ -320,36 +323,17 @@ def generate_dataset_menu():
     if difficulty is None:
         return
 
-    count_prompt = "\nHow many puzzles should be generated?"
-    if difficulty == ALL_DIFFICULTIES_OPTION:
-        count_prompt = "\nHow many puzzles should be generated per difficulty?"
-
-    count = prompt_positive_int(count_prompt)
+    count = prompt_positive_int("\nHow many puzzles should be generated?")
     if count is None:
         return
 
-    difficulties = (
-        list(DIFFICULTY_PERCENT_RANGES)
-        if difficulty == ALL_DIFFICULTIES_OPTION
-        else [difficulty]
-    )
-    difficulty_label = (
-        "easy, medium, and hard"
-        if difficulty == ALL_DIFFICULTIES_OPTION
-        else difficulty
-    )
-
-    print(f"\nGenerating {count} {size}x{size} {difficulty_label} puzzle(s)...")
+    print(f"\nGenerating {count} {size}x{size} {difficulty} puzzle(s)...")
     start = time.perf_counter()
-    paths = []
     try:
-        for selected_difficulty in difficulties:
-            paths.append(generate_dataset(size, selected_difficulty, count))
+        path = generate_dataset(size, difficulty, count)
     except Exception as exc:
         print(f"Dataset generation failed: {exc}")
         return
 
-    for path in paths:
-        print(f"Dataset written to: {path}")
+    print(f"Dataset written to: {path}")
     print(f"Generation time: {time.perf_counter() - start:.4f}s")
-

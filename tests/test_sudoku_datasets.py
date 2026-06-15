@@ -8,11 +8,12 @@ import unittest
 from unittest.mock import Mock, patch
 
 from cli_helpers import prompt_size
+import generator.verification as verification_module
 from generator import (
-    ALL_DIFFICULTIES_OPTION,
     DIFFICULTY_PERCENT_RANGES,
     clue_count,
     dataset_path,
+    dataset_size_from_path,
     expand_difficulties,
     generation as generation_module,
     generate_dataset_records,
@@ -90,7 +91,7 @@ class SudokuDatasetTests(unittest.TestCase):
             loaded = read_dataset(path, expected_size=36)
 
         self.assertEqual(len(loaded), 1)
-        self.assertEqual(path.name, "hard.jsonl")
+        self.assertEqual(path.name, "36x36_hard_1.jsonl")
         self.assertEqual(loaded[0]["size"], 36)
         self.assertEqual(loaded[0]["difficulty"], "hard")
         self.assertEqual(loaded[0]["verification_mode"], "derived")
@@ -111,11 +112,11 @@ class SudokuDatasetTests(unittest.TestCase):
 
     def test_dataset_path_uses_stable_size_and_difficulty(self):
         self.assertEqual(
-            dataset_path(9, "medium"),
-            Path("data/datasets") / "9x9" / "medium.jsonl",
+            dataset_path(9, "medium", 100),
+            Path("data/datasets") / "9x9_medium_100.jsonl",
         )
 
-    def test_dataset_writer_overwrites_same_size_and_difficulty(self):
+    def test_dataset_writer_uses_record_count_in_filename(self):
         first_records = generate_dataset_records(4, "easy", 1, seed=123, verify=False)
         second_records = generate_dataset_records(4, "easy", 2, seed=456, verify=False)
 
@@ -124,8 +125,9 @@ class SudokuDatasetTests(unittest.TestCase):
             second = write_dataset_records(second_records, 4, "easy", root=root)
             loaded = read_dataset(second, expected_size=4)
 
-        self.assertEqual(first, second)
-        self.assertEqual(second.name, "easy.jsonl")
+        self.assertNotEqual(first, second)
+        self.assertEqual(first.name, "4x4_easy_1.jsonl")
+        self.assertEqual(second.name, "4x4_easy_2.jsonl")
         self.assertEqual(len(loaded), 2)
 
     def test_list_datasets_returns_stable_difficulty_files(self):
@@ -137,6 +139,22 @@ class SudokuDatasetTests(unittest.TestCase):
             datasets = list_datasets(4, root=root)
 
         self.assertEqual(datasets, [easy, medium])
+
+    def test_list_datasets_can_return_all_available_datasets(self):
+        records = generate_dataset_records(4, "easy", 1, seed=123, verify=False)
+
+        with tempfile.TemporaryDirectory() as root:
+            small = write_dataset_records(records, 4, "easy", root=root)
+            large = write_dataset_records(records, 9, "medium", root=root)
+            datasets = list_datasets(root=root)
+
+        self.assertEqual(datasets, [small, large])
+
+    def test_dataset_size_from_path_uses_dataset_filename(self):
+        self.assertEqual(
+            dataset_size_from_path("data/datasets/16x16_hard_100.jsonl"),
+            16,
+        )
 
     def test_large_dataset_records_have_required_metadata_and_board_lengths(self):
         record = generate_dataset_records(36, "medium", 1, seed=123, verify=False)[0]
@@ -172,12 +190,7 @@ class SudokuGenerationPolicyTests(unittest.TestCase):
             solution_count=1,
             runtime_seconds=0.0,
         )
-        fake_verifier = SimpleNamespace(verify_puzzle=verify)
-
-        with patch.dict(
-            "sys.modules",
-            {"generator.verification": fake_verifier},
-        ):
+        with patch("generator.generation.verify_puzzle", verify):
             generated = generate_puzzle(size=4, clues=6, seed=123, verify=True)
 
         self.assertEqual(generated.actual_clues, 6)
@@ -192,15 +205,7 @@ class SudokuGenerationPolicyTests(unittest.TestCase):
 
     def test_dataset_generation_does_not_verify_by_default(self):
         verify = Mock(side_effect=AssertionError("verification should be explicit"))
-        fake_verifier = SimpleNamespace(
-            DerivedVerificationResult=SimpleNamespace,
-            verify_puzzle=verify,
-        )
-
-        with patch.dict(
-            "sys.modules",
-            {"generator.verification": fake_verifier},
-        ):
+        with patch("generator.generation.verify_puzzle", verify):
             records = generate_dataset_records(4, "easy", 2, seed=123)
 
         self.assertEqual(len(records), 2)
@@ -234,18 +239,18 @@ class SudokuGenerationPolicyTests(unittest.TestCase):
 
 
 class DatasetMenuSmokeTests(unittest.TestCase):
-    def test_generate_dataset_menu_can_generate_all_difficulties(self):
+    def test_generate_dataset_menu_generates_selected_difficulty(self):
         generated = []
 
         def fake_generate_dataset(size, difficulty, count):
             generated.append((size, difficulty, count))
-            return Path(f"data/datasets/{size}x{size}/{difficulty}.jsonl")
+            return Path(f"data/datasets/{size}x{size}_{difficulty}_{count}.jsonl")
 
         output = io.StringIO()
         with patch("generator.generation.prompt_size", return_value=4):
             with patch(
                 "generator.generation.prompt_difficulty",
-                return_value=ALL_DIFFICULTIES_OPTION,
+                return_value="medium",
             ):
                 with patch("generator.generation.prompt_positive_int", return_value=2):
                     with patch(
@@ -257,23 +262,43 @@ class DatasetMenuSmokeTests(unittest.TestCase):
 
         self.assertEqual(
             generated,
-            [
-                (4, "easy", 2),
-                (4, "medium", 2),
-                (4, "hard", 2),
-            ],
+            [(4, "medium", 2)],
         )
-        self.assertIn("easy.jsonl", output.getvalue())
-        self.assertIn("medium.jsonl", output.getvalue())
-        self.assertIn("hard.jsonl", output.getvalue())
+        self.assertIn("4x4_medium_2.jsonl", output.getvalue())
 
-    def test_prompt_difficulty_includes_all_difficulties_option(self):
+    def test_prompt_difficulty_includes_mixed_option(self):
         output = io.StringIO()
-        with patch("builtins.input", return_value="5"):
+        with patch("builtins.input", return_value="4"):
             with contextlib.redirect_stdout(output):
                 selected = prompt_difficulty()
 
-        self.assertEqual(selected, ALL_DIFFICULTIES_OPTION)
+        self.assertEqual(selected, "mixed")
+
+    def test_verify_dataset_menu_selects_from_all_available_datasets(self):
+        selected_path = Path("data/datasets/4x4_easy_1.jsonl")
+
+        with patch("generator.generation.select_dataset", return_value=selected_path) as select:
+            with patch("cli_helpers.prompt_choice", return_value="solvable"):
+                with patch(
+                    "generator.verification.verify_dataset",
+                    return_value=SimpleNamespace(
+                        mode="solvable",
+                        total=1,
+                        valid_count=1,
+                        invalid_count=0,
+                        runtime_seconds=0.0,
+                        failures=[],
+                    ),
+                ) as verify:
+                    with contextlib.redirect_stdout(io.StringIO()):
+                        verification_module.verify_dataset_menu()
+
+        select.assert_called_once_with()
+        verify.assert_called_once_with(
+            selected_path,
+            expected_size=4,
+            mode="solvable",
+        )
 
 
 class CliHelperTests(unittest.TestCase):
