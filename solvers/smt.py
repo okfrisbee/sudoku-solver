@@ -3,7 +3,7 @@ import time
 from z3 import sat
 
 from board_utils import format_board
-from benchmark.generation import build_z3_sudoku_solver
+from generator import build_z3_sudoku_solver
 from solvers.metrics import SolverResult
 
 

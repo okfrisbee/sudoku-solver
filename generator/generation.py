@@ -8,10 +8,10 @@ from typing import TYPE_CHECKING, Any
 from board_utils import format_board, parse_board
 
 if TYPE_CHECKING:
-    from .sudoku_verifier import VerificationResult
+    from .verification import VerificationResult
 
 
-DATASETS_DIR = "benchmark/datasets"
+DATASETS_DIR = "data/datasets"
 SUPPORTED_SIZES = (4, 9, 16, 25, 36, 49, 64, 81, 100)
 DIFFICULTY_PERCENT_RANGES = {
     "easy": (0.75, 0.85),
@@ -143,7 +143,7 @@ def generate_puzzle(
         puzzle_values[index] = 0
 
     if verify:
-        from .sudoku_verifier import verify_puzzle
+        from .verification import verify_puzzle
 
         verification = verify_puzzle(puzzle_values, mode="solvable")
     else:
@@ -334,7 +334,7 @@ def verify_dataset_records(
 ) -> DatasetVerificationSummary:
     from time import perf_counter
 
-    from .sudoku_verifier import verify_puzzle
+    from .verification import verify_puzzle
 
     start = perf_counter()
     valid_count = 0

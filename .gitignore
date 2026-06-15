@@ -1,8 +1,10 @@
-.venv
+.venv/
 __pycache__/
-.codex
-benchmark_results_*.csv
-benchmark/results/
-benchmark/datasets/
+*.py[cod]
+*$py.class
+
+.codex/
 .agents/
-tests/
+
+benchmark_results_*.csv
+data/

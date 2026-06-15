@@ -1,4 +1,4 @@
-from .sudoku_datasets import (
+from .generation import (
     DATASETS_DIR,
     DIFFICULTIES,
     DIFFICULTY_PERCENT_RANGES,
@@ -24,7 +24,7 @@ from .sudoku_datasets import (
     verify_dataset_records,
     write_dataset_records,
 )
-from .sudoku_verifier import (
+from .verification import (
     ValidityMode,
     VerificationResult,
     build_z3_sudoku_solver,

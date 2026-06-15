@@ -2,17 +2,19 @@ import os
 import time
 
 from benchmark import (
-    DIFFICULTIES,
-    DIFFICULTY_PERCENT_RANGES,
     benchmark_dataset,
-    generate_dataset,
     prompt_benchmark_solver_mode,
     prompt_write_csv,
     run_solver,
-    verify_dataset,
 )
 from cli_helpers import prompt_choice, prompt_size, select_dataset
-from solvers.csp_solver import solve_csp
+from generator import (
+    DIFFICULTIES,
+    DIFFICULTY_PERCENT_RANGES,
+    generate_dataset,
+    verify_dataset,
+)
+from solvers.csp import solve_csp
 
 
 ALL_DIFFICULTIES_OPTION = "all difficulties"

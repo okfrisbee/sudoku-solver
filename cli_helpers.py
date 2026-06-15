@@ -1,4 +1,4 @@
-from benchmark.generation import SUPPORTED_SIZES, list_datasets
+from generator import SUPPORTED_SIZES, list_datasets
 
 
 def prompt_choice(title, options):
