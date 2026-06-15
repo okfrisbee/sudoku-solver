@@ -3,7 +3,6 @@ from pathlib import Path
 import queue
 import time
 
-import board_utils
 from cli_helpers import prompt_choice, prompt_size, select_dataset
 from generator import read_dataset
 from .reporting import (
@@ -14,7 +13,6 @@ from .reporting import (
     write_benchmark_csv,
     write_benchmark_summary_json,
 )
-from .visualization import visualize_benchmark
 
 from solvers.csp import solve_csp
 from solvers.dlx import solve_dlx
@@ -44,7 +42,7 @@ def _solve_worker(solver_fn, puzzle, result_queue):
     result_queue.put(safe_solve(solver_fn, puzzle))
 
 
-def benchmark_solve_with_timeout(
+def solve_with_timeout(
     solver_fn,
     puzzle,
     timeout_seconds=BENCHMARK_SOLVER_TIMEOUT_SECONDS,
@@ -80,31 +78,6 @@ def benchmark_solve_with_timeout(
         )
 
 
-def prompt_benchmark_solver_mode():
-    selected = prompt_choice("\nSelect benchmark solver mode:", ["all", "csp only"])
-    if selected is None:
-        print("Invalid benchmark solver mode.")
-    return selected
-
-
-def prompt_write_csv():
-    return input("Save benchmark results to CSV and JSON? (y/n): ").strip().lower() == "y"
-
-
-def run_solver(board, solver_fn, show_board=False):
-    result = safe_solve(solver_fn, board)
-
-    if not result.solved:
-        print("Puzzle is not solvable")
-        return -1
-
-    if show_board:
-        print("\nSolved Board: ")
-        board_utils.print_board(result.solution)
-
-    return result.runtime_seconds
-
-
 def solvers_for_size(size):
     solvers = {
         "csp": solve_csp,
@@ -115,6 +88,8 @@ def solvers_for_size(size):
     if size in {4, 9, 16}:
         return {"naive": solve_naive, **solvers}
     return solvers
+
+
 def benchmark_dataset(
     dataset_path,
     size,
@@ -125,7 +100,7 @@ def benchmark_dataset(
     records = read_dataset(dataset_path, expected_size=size)
     if not records:
         print("\nDataset has no puzzles.")
-        return
+        return None
 
     solvers = solvers_for_size(size)
     if solver_names is not None:
@@ -138,7 +113,7 @@ def benchmark_dataset(
         missing = requested - set(solvers)
         if missing:
             print(f"\nNo solver found for: {', '.join(sorted(missing))}")
-            return
+            return None
 
     difficulty = Path(dataset_path).stem
     csv_rows = []
@@ -151,7 +126,7 @@ def benchmark_dataset(
         puzzle = record["puzzle"]
         row_parts = [f"{i}:"]
         for name, fn in solvers.items():
-            result = benchmark_solve_with_timeout(
+            result = solve_with_timeout(
                 fn,
                 puzzle,
                 timeout_seconds=timeout_seconds,
@@ -183,6 +158,21 @@ def benchmark_dataset(
         print(" | ".join(row_parts))
 
     summary_rows = benchmark_summary_rows(results_by_solver, tested)
+    benchmark_result = {
+        "dataset": {
+            "path": str(dataset_path),
+            "name": dataset_name,
+            "size": size,
+            "difficulty": difficulty,
+            "puzzle_count": len(records),
+        },
+        "tested": tested,
+        "solvers": list(solvers),
+        "summary_rows": summary_rows,
+        "results_by_solver": results_by_solver,
+        "times_by_solver": times_by_solver,
+    }
+
     print("\n-----Results-----")
     print(f"Puzzles Tested: {tested}\n")
     print_summary_table(summary_rows)
@@ -191,34 +181,17 @@ def benchmark_dataset(
         csv_file = write_benchmark_csv(csv_rows, csv_path)
         summary_file = write_benchmark_summary_json(
             {
-                "dataset": {
-                    "path": str(dataset_path),
-                    "name": dataset_name,
-                    "size": size,
-                    "difficulty": difficulty,
-                    "puzzle_count": len(records),
-                },
-                "tested": tested,
-                "solvers": list(solvers),
-                "summary_rows": summary_rows,
+                "dataset": benchmark_result["dataset"],
+                "tested": benchmark_result["tested"],
+                "solvers": benchmark_result["solvers"],
+                "summary_rows": benchmark_result["summary_rows"],
             },
             json_path,
         )
         print(f"\nCSV written to: {csv_file}")
         print(f"JSON summary written to: {summary_file}")
 
-    visual = input("\nVisualize data? (y/n): ").strip().lower()
-    if visual == "y":
-        show_naive = True
-        if "naive" in times_by_solver:
-            show_naive = input("Show naive solver on graph? (y/n): ").strip().lower() == "y"
-        avgs = {
-            name: (sum(result.runtime_seconds for result in results) / tested)
-            if tested
-            else 0.0
-            for name, results in results_by_solver.items()
-        }
-        visualize_benchmark(times_by_solver, tested, avgs, show_naive=show_naive)
+    return benchmark_result
 
 
 def benchmark_menu():
@@ -230,15 +203,16 @@ def benchmark_menu():
     if dataset_path is None:
         return
 
-    solver_mode = prompt_benchmark_solver_mode()
+    solver_mode = prompt_choice("\nSelect benchmark solver mode:", ["all", "csp only"])
     if solver_mode is None:
+        print("Invalid benchmark solver mode.")
         return
     solver_names = ["csp"] if solver_mode == "csp only" else None
 
     print()
-    write_csv = prompt_write_csv()
+    write_csv = input("Save benchmark results to CSV and JSON? (y/n): ").strip().lower() == "y"
     print()
-    benchmark_dataset(
+    return benchmark_dataset(
         dataset_path,
         size,
         write_csv=write_csv,

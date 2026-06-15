@@ -1,49 +1,26 @@
 import os
 import time
 
+import board_utils
 from benchmark import (
-    benchmark_dataset,
-    prompt_benchmark_solver_mode,
-    prompt_write_csv,
-    run_solver,
+    benchmark_menu,
+    solve_with_timeout,
 )
-from cli_helpers import prompt_choice, prompt_size, select_dataset
+from benchmark.visualization import visualization_menu
+from cli_helpers import (
+    ALL_DIFFICULTIES_OPTION,
+    prompt_choice,
+    prompt_difficulty,
+    prompt_positive_int,
+    prompt_size,
+    select_dataset,
+)
 from generator import (
-    DIFFICULTIES,
     DIFFICULTY_PERCENT_RANGES,
     generate_dataset,
     verify_dataset,
 )
 from solvers.csp import solve_csp
-
-
-ALL_DIFFICULTIES_OPTION = "all difficulties"
-
-
-def prompt_difficulty():
-    selected = prompt_choice(
-        "\nSelect difficulty:",
-        list(DIFFICULTIES) + [ALL_DIFFICULTIES_OPTION],
-    )
-    if selected is None:
-        print("Invalid difficulty.")
-    return selected
-
-
-def prompt_verification_mode():
-    selected = prompt_choice("\nSelect verification mode:", ["solvable", "unique"])
-    if selected is None:
-        print("Invalid verification mode.")
-    return selected
-
-
-def prompt_positive_int(message):
-    print(message)
-    value = input().strip()
-    if not value.isdigit() or int(value) <= 0:
-        print("Invalid count.")
-        return None
-    return int(value)
 
 
 def generate_dataset_menu():
@@ -87,29 +64,6 @@ def generate_dataset_menu():
     for path in paths:
         print(f"Dataset written to: {path}")
     print(f"Generation time: {time.perf_counter() - start:.4f}s")
-def benchmark_menu():
-    size = prompt_size()
-    if size is None:
-        return
-
-    dataset_path = select_dataset(size)
-    if dataset_path is None:
-        return
-
-    solver_mode = prompt_benchmark_solver_mode()
-    if solver_mode is None:
-        return
-    solver_names = ["csp"] if solver_mode == "csp only" else None
-
-    print()
-    write_csv = prompt_write_csv()
-    print()
-    benchmark_dataset(
-        dataset_path,
-        size,
-        write_csv=write_csv,
-        solver_names=solver_names,
-    )
 
 
 def verify_dataset_menu():
@@ -121,8 +75,9 @@ def verify_dataset_menu():
     if dataset_path is None:
         return
 
-    mode = prompt_verification_mode()
+    mode = prompt_choice("\nSelect verification mode:", ["solvable", "unique"])
     if mode is None:
+        print("Invalid verification mode.")
         return
 
     print(f"\nVerifying {dataset_path} with mode={mode}...")
@@ -168,9 +123,13 @@ def main():
             )
             puzzle = input().strip()
             print()
-            time_elapsed = run_solver(puzzle, solve_csp, show_board=True)
-            if time_elapsed != -1:
-                print(f"Time Elapsed: {time_elapsed:.4f}s")
+            result = solve_with_timeout(solve_csp, puzzle)
+            if result.solved:
+                print("\nSolved Board: ")
+                board_utils.print_board(result.solution)
+                print(f"Time Elapsed: {result.runtime_seconds:.4f}s")
+            else:
+                print("Puzzle is not solvable")
 
         elif user_input == "2":
             os.system("clear")
@@ -182,7 +141,8 @@ def main():
 
         elif user_input == "4":
             os.system("clear")
-            benchmark_menu()
+            benchmark_result = benchmark_menu()
+            visualization_menu(benchmark_result)
 
         elif user_input == "5":
             return

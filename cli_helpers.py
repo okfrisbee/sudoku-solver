@@ -1,4 +1,7 @@
-from generator import SUPPORTED_SIZES, list_datasets
+from generator import DIFFICULTIES, SUPPORTED_SIZES, list_datasets
+
+
+ALL_DIFFICULTIES_OPTION = "all difficulties"
 
 
 def prompt_choice(title, options):
@@ -23,6 +26,25 @@ def prompt_size():
         print("Invalid size.")
         return None
     return int(selected.split("x", 1)[0])
+
+
+def prompt_difficulty():
+    selected = prompt_choice(
+        "\nSelect difficulty:",
+        list(DIFFICULTIES) + [ALL_DIFFICULTIES_OPTION],
+    )
+    if selected is None:
+        print("Invalid difficulty.")
+    return selected
+
+
+def prompt_positive_int(message):
+    print(message)
+    value = input().strip()
+    if not value.isdigit() or int(value) <= 0:
+        print("Invalid count.")
+        return None
+    return int(value)
 
 
 def select_dataset(size):
