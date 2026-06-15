@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from dataclasses import dataclass
 import json
 from math import isqrt
@@ -56,7 +54,7 @@ class GeneratedPuzzle:
     box_size: int
     target_clues: int
     actual_clues: int
-    verification: VerificationResult | DerivedVerificationResult
+    verification: "VerificationResult | DerivedVerificationResult"
 
 
 @dataclass

@@ -1,7 +1,4 @@
-from __future__ import annotations
-
 import time
-from typing import Iterable
 
 from board_utils import parse_board, board_size, format_board
 from solvers.metrics import SolverResult
@@ -199,7 +196,7 @@ def candidate_to_columns(r: int, c: int, value: int, n: int, box: int) -> list[i
     ]
 
 
-def build_dlx(board: str | Iterable[int]) -> tuple[DancingLinks, list[int], int, int]:
+def build_dlx(board: str | list[int]) -> tuple[DancingLinks, list[int], int, int]:
     values = parse_board(board)
     n, box = board_size(values)
 
@@ -223,7 +220,7 @@ def build_dlx(board: str | Iterable[int]) -> tuple[DancingLinks, list[int], int,
     return dlx, values, n, box
 
 
-def solve_dlx(board: str | Iterable[int]) -> SolverResult:
+def solve_dlx(board: str | list[int]) -> SolverResult:
     start = time.perf_counter()
     setup_seconds = None
     solve_seconds = None

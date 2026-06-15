@@ -1,11 +1,10 @@
 import time
-from typing import Iterable
 
 from board_utils import board_size, format_board, parse_board
 from solvers.metrics import SolverResult
 
 
-def solve_naive(board: str | Iterable[int]) -> SolverResult:
+def solve_naive(board: str | list[int]) -> SolverResult:
     start = time.perf_counter()
     recursive_calls = 0
     assignments = 0

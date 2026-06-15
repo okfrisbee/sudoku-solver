@@ -22,7 +22,6 @@ from .benchmark import (
     run_solver,
     safe_solve,
     solvers_for_size,
-    unavailable_solver_result,
     write_benchmark_csv,
     write_benchmark_summary_json,
 )
@@ -81,7 +80,6 @@ __all__ = [
     "run_solver",
     "safe_solve",
     "solvers_for_size",
-    "unavailable_solver_result",
     "write_benchmark_csv",
     "write_benchmark_summary_json",
     "DATASETS_DIR",

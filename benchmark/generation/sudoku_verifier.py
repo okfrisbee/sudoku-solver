@@ -1,8 +1,6 @@
-from __future__ import annotations
-
 from dataclasses import dataclass
 import time
-from typing import Iterable, Literal
+from typing import Literal
 
 from z3 import And, Distinct, Int, Or, Solver, sat
 
@@ -25,7 +23,7 @@ class VerificationResult:
 
 
 def build_z3_sudoku_solver(
-    board: str | Iterable[int],
+    board: str | list[int],
 ) -> tuple[Solver, list[list[Int]], list[int], int, int]:
     values = parse_board(board)
     n, box = board_size(values)
@@ -71,7 +69,7 @@ def _solution_from_model(cells: list[list[Int]], n: int, model) -> list[int]:
 
 
 def verify_puzzle(
-    board: str | Iterable[int], mode: ValidityMode = "solvable"
+    board: str | list[int], mode: ValidityMode = "solvable"
 ) -> VerificationResult:
     start = time.perf_counter()
     setup_seconds = None

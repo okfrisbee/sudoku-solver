@@ -1,7 +1,4 @@
-from __future__ import annotations
-
 import time
-from typing import Iterable
 
 from pysat.card import CardEnc, EncType
 from pysat.formula import CNF, IDPool
@@ -14,7 +11,7 @@ from solvers.metrics import SolverResult
 DEFAULT_SOLVER = "cadical153"
 
 
-def encode_sudoku_cnf(board: str | Iterable[int]) -> tuple[CNF, IDPool, int]:
+def encode_sudoku_cnf(board: str | list[int]) -> tuple[CNF, IDPool, int]:
     """Encode an NxN Sudoku into CNF.
 
     This version supports boards such as 4x4, 9x9, 16x16, 25x25, and 100x100
@@ -78,7 +75,7 @@ def encode_sudoku_cnf(board: str | Iterable[int]) -> tuple[CNF, IDPool, int]:
 
 
 def solve_sudoku(
-    board: str | Iterable[int], solver_name: str = DEFAULT_SOLVER
+    board: str | list[int], solver_name: str = DEFAULT_SOLVER
 ) -> SolverResult:
     """Solve an NxN Sudoku via SAT.
 

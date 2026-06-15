@@ -14,24 +14,8 @@ from solvers.csp_solver import solve_csp
 from solvers.dlx_solver import solve_dlx
 from solvers.metrics import SolverResult
 from solvers.naive_solver import solve_naive
-
-
-try:
-    from solvers.sat_solver import solve_sudoku as solve_sat
-except ImportError as exc:
-    SAT_IMPORT_ERROR = exc
-
-    def solve_sat(_board):
-        return unavailable_solver_result("sat", SAT_IMPORT_ERROR)
-
-
-try:
-    from solvers.smt_solver import solve_smt
-except ImportError as exc:
-    SMT_IMPORT_ERROR = exc
-
-    def solve_smt(_board):
-        return unavailable_solver_result("smt", SMT_IMPORT_ERROR)
+from solvers.sat_solver import solve_sudoku as solve_sat
+from solvers.smt_solver import solve_smt
 
 
 CSV_FIELDS = [
@@ -54,15 +38,6 @@ CSV_FIELDS = [
 ]
 BENCHMARK_RESULTS_DIR = "benchmark/results"
 BENCHMARK_SOLVER_TIMEOUT_SECONDS = 60
-
-
-def unavailable_solver_result(name, exc):
-    return SolverResult(
-        solution=None,
-        status="error",
-        runtime_seconds=0.0,
-        error=f"{name} solver unavailable: {exc}",
-    )
 
 
 def safe_solve(solver_fn, puzzle) -> SolverResult:
