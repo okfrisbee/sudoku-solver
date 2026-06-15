@@ -1,6 +1,7 @@
 from dataclasses import dataclass
+from pathlib import Path
 import time
-from typing import Literal
+from typing import Any, Literal
 
 from z3 import And, Distinct, Int, Or, Solver, sat
 
@@ -20,6 +21,35 @@ class VerificationResult:
     setup_seconds: float | None = None
     solve_seconds: float | None = None
     error: str | None = None
+
+
+@dataclass
+class DerivedVerificationResult:
+    valid: bool
+    mode: str
+    solution: str | None
+    solution_count: int | None
+    runtime_seconds: float
+    setup_seconds: float | None = None
+    solve_seconds: float | None = None
+    error: str | None = None
+
+
+@dataclass
+class DatasetVerificationFailure:
+    record_number: int
+    record_id: Any
+    error: str | None
+
+
+@dataclass
+class DatasetVerificationSummary:
+    mode: str
+    total: int
+    valid_count: int
+    invalid_count: int
+    runtime_seconds: float
+    failures: list[DatasetVerificationFailure]
 
 
 def build_z3_sudoku_solver(
@@ -165,3 +195,90 @@ def verify_puzzle(
             solve_seconds=solve_seconds,
             error=str(exc),
         )
+
+
+def verify_dataset_records(
+    records: list[dict[str, Any]],
+    mode: str = "solvable",
+    max_failures: int = 10,
+) -> DatasetVerificationSummary:
+    start = time.perf_counter()
+    valid_count = 0
+    failures: list[DatasetVerificationFailure] = []
+
+    for record_number, record in enumerate(records, start=1):
+        result = verify_puzzle(record["puzzle"], mode=mode)
+        if result.valid:
+            valid_count += 1
+            continue
+
+        if len(failures) < max_failures:
+            failures.append(
+                DatasetVerificationFailure(
+                    record_number=record_number,
+                    record_id=record.get("id"),
+                    error=result.error,
+                )
+            )
+
+    return DatasetVerificationSummary(
+        mode=mode,
+        total=len(records),
+        valid_count=valid_count,
+        invalid_count=len(records) - valid_count,
+        runtime_seconds=time.perf_counter() - start,
+        failures=failures,
+    )
+
+
+def verify_dataset(
+    path: str | Path,
+    expected_size: int | None = None,
+    mode: str = "solvable",
+    max_failures: int = 10,
+) -> DatasetVerificationSummary:
+    from .generation import read_dataset
+
+    records = read_dataset(path, expected_size=expected_size)
+    return verify_dataset_records(records, mode=mode, max_failures=max_failures)
+
+
+def verify_dataset_menu():
+    from cli_helpers import prompt_choice, prompt_size
+    from .generation import select_dataset
+
+    size = prompt_size()
+    if size is None:
+        return
+
+    dataset_path = select_dataset(size)
+    if dataset_path is None:
+        return
+
+    mode = prompt_choice("\nSelect verification mode:", ["solvable", "unique"])
+    if mode is None:
+        print("Invalid verification mode.")
+        return
+
+    print(f"\nVerifying {dataset_path} with mode={mode}...")
+    try:
+        summary = verify_dataset(dataset_path, expected_size=size, mode=mode)
+    except Exception as exc:
+        print(f"Dataset verification failed: {exc}")
+        return
+
+    print("\n-----Verification Results-----")
+    print(f"Dataset: {dataset_path}")
+    print(f"Mode: {summary.mode}")
+    print(f"Puzzles Checked: {summary.total}")
+    print(f"Valid: {summary.valid_count}")
+    print(f"Invalid: {summary.invalid_count}")
+    print(f"Verification time: {summary.runtime_seconds:.4f}s")
+
+    if summary.failures:
+        print("\nFailures:")
+        for failure in summary.failures:
+            print(
+                f"{failure.record_number}: "
+                f"id={failure.record_id} error={failure.error or 'verification failed'}"
+            )

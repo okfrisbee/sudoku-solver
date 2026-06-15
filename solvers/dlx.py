@@ -1,6 +1,6 @@
 import time
 
-from board_utils import parse_board, board_size, format_board
+from board_utils import board_size, format_board, parse_board
 from solvers.metrics import SolverResult
 
 

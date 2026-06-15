@@ -1,7 +1,4 @@
-from generator import DIFFICULTIES, SUPPORTED_SIZES, list_datasets
-
-
-ALL_DIFFICULTIES_OPTION = "all difficulties"
+from board_utils import validate_size
 
 
 def prompt_choice(title, options):
@@ -20,22 +17,19 @@ def prompt_choice(title, options):
 
 
 def prompt_size():
-    options = [f"{size}x{size}" for size in SUPPORTED_SIZES]
-    selected = prompt_choice("\nSelect puzzle size:", options)
-    if selected is None:
+    print("\nEnter puzzle size:")
+    value = input().strip()
+    if not value.isdigit():
         print("Invalid size.")
         return None
-    return int(selected.split("x", 1)[0])
 
-
-def prompt_difficulty():
-    selected = prompt_choice(
-        "\nSelect difficulty:",
-        list(DIFFICULTIES) + [ALL_DIFFICULTIES_OPTION],
-    )
-    if selected is None:
-        print("Invalid difficulty.")
-    return selected
+    size = int(value)
+    try:
+        validate_size(size)
+    except ValueError:
+        print("Invalid size.")
+        return None
+    return size
 
 
 def prompt_positive_int(message):
@@ -46,17 +40,3 @@ def prompt_positive_int(message):
         return None
     return int(value)
 
-
-def select_dataset(size):
-    datasets = list_datasets(size)
-    if not datasets:
-        print(f"\nNo datasets found for {size}x{size}. Generate a dataset first.")
-        return None
-
-    options = [path.name for path in datasets]
-    selected = prompt_choice("\nSelect dataset:", options)
-    if selected is None:
-        print("Invalid dataset.")
-        return None
-
-    return datasets[options.index(selected)]

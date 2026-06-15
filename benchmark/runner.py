@@ -3,8 +3,8 @@ from pathlib import Path
 import queue
 import time
 
-from cli_helpers import prompt_choice, prompt_size, select_dataset
-from generator import read_dataset
+from cli_helpers import prompt_choice, prompt_size
+from generator import read_dataset, select_dataset
 from .reporting import (
     benchmark_summary_rows,
     csv_row,

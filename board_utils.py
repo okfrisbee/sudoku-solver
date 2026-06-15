@@ -1,6 +1,17 @@
 from math import isqrt
 
 
+def validate_size(size: int) -> tuple[int, int]:
+    if size <= 0:
+        raise ValueError("Size must be positive")
+
+    box = isqrt(size)
+    if box * box != size:
+        raise ValueError("Size must be a perfect square")
+
+    return size, box
+
+
 def parse_board(board: str | list[int]) -> list[int]:
     if isinstance(board, str):
         board = board.strip()
@@ -17,9 +28,7 @@ def parse_board(board: str | list[int]) -> list[int]:
     if size * size != len(values):
         raise ValueError("Board length must be a perfect square")
 
-    box = isqrt(size)
-    if box * box != size:
-        raise ValueError("Board width must be a perfect square")
+    validate_size(size)
 
     for v in values:
         if not (0 <= v <= size):
@@ -39,8 +48,7 @@ def print_board(board: str):
 
 def board_size(values: list[int]) -> tuple[int, int]:
     n = isqrt(len(values))
-    b = isqrt(n)
-    return n, b
+    return validate_size(n)
 
 
 def format_board(values: list[int]) -> str:

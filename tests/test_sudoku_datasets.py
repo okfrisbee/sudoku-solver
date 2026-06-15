@@ -7,14 +7,18 @@ import tempfile
 import unittest
 from unittest.mock import Mock, patch
 
+from cli_helpers import prompt_size
 from generator import (
+    ALL_DIFFICULTIES_OPTION,
     DIFFICULTY_PERCENT_RANGES,
     clue_count,
     dataset_path,
     expand_difficulties,
+    generation as generation_module,
     generate_dataset_records,
     generate_puzzle,
     list_datasets,
+    prompt_difficulty,
     read_dataset,
     verify_dataset_records,
     write_dataset_records,
@@ -188,7 +192,10 @@ class SudokuGenerationPolicyTests(unittest.TestCase):
 
     def test_dataset_generation_does_not_verify_by_default(self):
         verify = Mock(side_effect=AssertionError("verification should be explicit"))
-        fake_verifier = SimpleNamespace(verify_puzzle=verify)
+        fake_verifier = SimpleNamespace(
+            DerivedVerificationResult=SimpleNamespace,
+            verify_puzzle=verify,
+        )
 
         with patch.dict(
             "sys.modules",
@@ -207,18 +214,13 @@ class SudokuGenerationPolicyTests(unittest.TestCase):
 
     def test_verify_dataset_records_uses_selected_mode(self):
         records = generate_dataset_records(4, "easy", 2, seed=123, verify=False)
-        verify = Mock(
+        with patch(
+            "generator.verification.verify_puzzle",
             side_effect=[
                 SimpleNamespace(valid=True, error=None),
                 SimpleNamespace(valid=False, error="Sudoku has multiple solutions."),
-            ]
-        )
-        fake_verifier = SimpleNamespace(verify_puzzle=verify)
-
-        with patch.dict(
-            "sys.modules",
-            {"generator.verification": fake_verifier},
-        ):
+            ],
+        ) as verify:
             summary = verify_dataset_records(records, mode="unique")
 
         self.assertEqual(summary.mode, "unique")
@@ -231,10 +233,8 @@ class SudokuGenerationPolicyTests(unittest.TestCase):
         self.assertEqual(verify.call_args.kwargs["mode"], "unique")
 
 
-class MainDatasetMenuSmokeTests(unittest.TestCase):
+class DatasetMenuSmokeTests(unittest.TestCase):
     def test_generate_dataset_menu_can_generate_all_difficulties(self):
-        import main
-
         generated = []
 
         def fake_generate_dataset(size, difficulty, count):
@@ -242,12 +242,18 @@ class MainDatasetMenuSmokeTests(unittest.TestCase):
             return Path(f"data/datasets/{size}x{size}/{difficulty}.jsonl")
 
         output = io.StringIO()
-        with patch("main.prompt_size", return_value=4):
-            with patch("main.prompt_difficulty", return_value=main.ALL_DIFFICULTIES_OPTION):
-                with patch("main.prompt_positive_int", return_value=2):
-                    with patch("main.generate_dataset", side_effect=fake_generate_dataset):
+        with patch("generator.generation.prompt_size", return_value=4):
+            with patch(
+                "generator.generation.prompt_difficulty",
+                return_value=ALL_DIFFICULTIES_OPTION,
+            ):
+                with patch("generator.generation.prompt_positive_int", return_value=2):
+                    with patch(
+                        "generator.generation.generate_dataset",
+                        side_effect=fake_generate_dataset,
+                    ):
                         with contextlib.redirect_stdout(output):
-                            main.generate_dataset_menu()
+                            generation_module.generate_dataset_menu()
 
         self.assertEqual(
             generated,
@@ -262,12 +268,41 @@ class MainDatasetMenuSmokeTests(unittest.TestCase):
         self.assertIn("hard.jsonl", output.getvalue())
 
     def test_prompt_difficulty_includes_all_difficulties_option(self):
-        import main
-
+        output = io.StringIO()
         with patch("builtins.input", return_value="5"):
-            selected = main.prompt_difficulty()
+            with contextlib.redirect_stdout(output):
+                selected = prompt_difficulty()
 
-        self.assertEqual(selected, main.ALL_DIFFICULTIES_OPTION)
+        self.assertEqual(selected, ALL_DIFFICULTIES_OPTION)
+
+
+class CliHelperTests(unittest.TestCase):
+    def test_prompt_size_accepts_numeric_sudoku_size(self):
+        output = io.StringIO()
+        with patch("builtins.input", return_value="9"):
+            with contextlib.redirect_stdout(output):
+                size = prompt_size()
+
+        self.assertEqual(size, 9)
+
+    def test_prompt_size_rejects_non_square_box_size(self):
+        output = io.StringIO()
+        with patch("builtins.input", return_value="10"):
+            with contextlib.redirect_stdout(output):
+                size = prompt_size()
+
+        self.assertIsNone(size)
+        self.assertIn("Invalid size.", output.getvalue())
+
+    def test_prompt_size_rejects_non_numeric_and_non_positive_input(self):
+        for value in ("abc", "0"):
+            output = io.StringIO()
+            with patch("builtins.input", return_value=value):
+                with contextlib.redirect_stdout(output):
+                    size = prompt_size()
+
+            self.assertIsNone(size)
+            self.assertIn("Invalid size.", output.getvalue())
 
 
 if __name__ == "__main__":

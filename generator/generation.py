@@ -1,18 +1,18 @@
 from dataclasses import dataclass
 import json
-from math import isqrt
 from pathlib import Path
 import random
+import time
 from typing import TYPE_CHECKING, Any
 
-from board_utils import format_board, parse_board
+from board_utils import format_board, parse_board, validate_size
+from cli_helpers import prompt_choice, prompt_positive_int, prompt_size
 
 if TYPE_CHECKING:
-    from .verification import VerificationResult
+    from .verification import DerivedVerificationResult, VerificationResult
 
 
 DATASETS_DIR = "data/datasets"
-SUPPORTED_SIZES = (4, 9, 16, 25, 36, 49, 64, 81, 100)
 DIFFICULTY_PERCENT_RANGES = {
     "easy": (0.75, 0.85),
     "medium": (0.50, 0.60),
@@ -35,18 +35,6 @@ REQUIRED_RECORD_FIELDS = {
 
 
 @dataclass
-class DerivedVerificationResult:
-    valid: bool
-    mode: str
-    solution: str | None
-    solution_count: int | None
-    runtime_seconds: float
-    setup_seconds: float | None = None
-    solve_seconds: float | None = None
-    error: str | None = None
-
-
-@dataclass
 class GeneratedPuzzle:
     puzzle: str
     solution: str
@@ -57,42 +45,8 @@ class GeneratedPuzzle:
     verification: "VerificationResult | DerivedVerificationResult"
 
 
-@dataclass
-class DatasetVerificationFailure:
-    record_number: int
-    record_id: Any
-    error: str | None
-
-
-@dataclass
-class DatasetVerificationSummary:
-    mode: str
-    total: int
-    valid_count: int
-    invalid_count: int
-    runtime_seconds: float
-    failures: list[DatasetVerificationFailure]
-
-
-def _validate_size(size: int) -> tuple[int, int]:
-    if size <= 0:
-        raise ValueError("Size must be positive")
-
-    box = isqrt(size)
-    if box * box != size:
-        raise ValueError("Size must have an integer square-root box size")
-
-    return size, box
-
-
-def validate_size(size: int) -> int:
-    if size not in SUPPORTED_SIZES:
-        raise ValueError(f"Unsupported size: {size}")
-    return size
-
-
 def generate_pattern_solution(size: int = 9, seed: int | None = None) -> str:
-    n, box = _validate_size(size)
+    n, box = validate_size(size)
     rng = random.Random(seed)
 
     def pattern(row: int, col: int) -> int:
@@ -127,7 +81,7 @@ def generate_puzzle(
     seed: int | None = None,
     verify: bool = False,
 ) -> GeneratedPuzzle:
-    n, box = _validate_size(size)
+    n, box = validate_size(size)
 
     if clues is None:
         clues = max(n, round(n * n * 0.4))
@@ -147,6 +101,8 @@ def generate_puzzle(
 
         verification = verify_puzzle(puzzle_values, mode="solvable")
     else:
+        from .verification import DerivedVerificationResult
+
         verification = DerivedVerificationResult(
             valid=True,
             mode="derived",
@@ -174,7 +130,6 @@ def random_clue_percent(difficulty: str, rng: random.Random) -> float:
 
 
 def clue_count(size: int, difficulty: str, rng: random.Random) -> tuple[int, float]:
-    validate_size(size)
     clue_percent = random_clue_percent(difficulty, rng)
     return round(size * size * clue_percent), clue_percent
 
@@ -205,7 +160,6 @@ def dataset_path(
     difficulty: str,
     root: str | Path = DATASETS_DIR,
 ) -> Path:
-    validate_size(size)
     if difficulty not in DIFFICULTIES:
         raise ValueError(f"Unsupported difficulty: {difficulty}")
     return dataset_directory(size, root) / f"{difficulty}.jsonl"
@@ -226,7 +180,9 @@ def write_dataset_records(
 ) -> Path:
     directory = dataset_directory(size, root)
     directory.mkdir(parents=True, exist_ok=True)
-    path = dataset_path(size, difficulty, root=root)
+    if difficulty not in DIFFICULTIES:
+        raise ValueError(f"Unsupported difficulty: {difficulty}")
+    path = directory / f"{difficulty}.jsonl"
 
     with open(path, "w", encoding="utf-8") as f:
         for record in records:
@@ -327,49 +283,73 @@ def generate_dataset(
     return write_dataset_records(records, size, difficulty, root=root)
 
 
-def verify_dataset_records(
-    records: list[dict[str, Any]],
-    mode: str = "solvable",
-    max_failures: int = 10,
-) -> DatasetVerificationSummary:
-    from time import perf_counter
+ALL_DIFFICULTIES_OPTION = "all difficulties"
 
-    from .verification import verify_puzzle
 
-    start = perf_counter()
-    valid_count = 0
-    failures: list[DatasetVerificationFailure] = []
+def prompt_difficulty():
+    selected = prompt_choice(
+        "\nSelect difficulty:",
+        list(DIFFICULTIES) + [ALL_DIFFICULTIES_OPTION],
+    )
+    if selected is None:
+        print("Invalid difficulty.")
+    return selected
 
-    for record_number, record in enumerate(records, start=1):
-        result = verify_puzzle(record["puzzle"], mode=mode)
-        if result.valid:
-            valid_count += 1
-            continue
 
-        if len(failures) < max_failures:
-            failures.append(
-                DatasetVerificationFailure(
-                    record_number=record_number,
-                    record_id=record.get("id"),
-                    error=result.error,
-                )
-            )
+def select_dataset(size):
+    datasets = list_datasets(size)
+    if not datasets:
+        print(f"\nNo datasets found for {size}x{size}. Generate a dataset first.")
+        return None
 
-    return DatasetVerificationSummary(
-        mode=mode,
-        total=len(records),
-        valid_count=valid_count,
-        invalid_count=len(records) - valid_count,
-        runtime_seconds=perf_counter() - start,
-        failures=failures,
+    options = [path.name for path in datasets]
+    selected = prompt_choice("\nSelect dataset:", options)
+    if selected is None:
+        print("Invalid dataset.")
+        return None
+
+    return datasets[options.index(selected)]
+
+
+def generate_dataset_menu():
+    size = prompt_size()
+    if size is None:
+        return
+
+    difficulty = prompt_difficulty()
+    if difficulty is None:
+        return
+
+    count_prompt = "\nHow many puzzles should be generated?"
+    if difficulty == ALL_DIFFICULTIES_OPTION:
+        count_prompt = "\nHow many puzzles should be generated per difficulty?"
+
+    count = prompt_positive_int(count_prompt)
+    if count is None:
+        return
+
+    difficulties = (
+        list(DIFFICULTY_PERCENT_RANGES)
+        if difficulty == ALL_DIFFICULTIES_OPTION
+        else [difficulty]
+    )
+    difficulty_label = (
+        "easy, medium, and hard"
+        if difficulty == ALL_DIFFICULTIES_OPTION
+        else difficulty
     )
 
+    print(f"\nGenerating {count} {size}x{size} {difficulty_label} puzzle(s)...")
+    start = time.perf_counter()
+    paths = []
+    try:
+        for selected_difficulty in difficulties:
+            paths.append(generate_dataset(size, selected_difficulty, count))
+    except Exception as exc:
+        print(f"Dataset generation failed: {exc}")
+        return
 
-def verify_dataset(
-    path: str | Path,
-    expected_size: int | None = None,
-    mode: str = "solvable",
-    max_failures: int = 10,
-) -> DatasetVerificationSummary:
-    records = read_dataset(path, expected_size=expected_size)
-    return verify_dataset_records(records, mode=mode, max_failures=max_failures)
+    for path in paths:
+        print(f"Dataset written to: {path}")
+    print(f"Generation time: {time.perf_counter() - start:.4f}s")
+
