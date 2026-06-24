@@ -1,6 +1,6 @@
-import csv
-import json
 from pathlib import Path
+
+import pandas as pd
 
 
 CSV_FIELDS = [
@@ -24,15 +24,24 @@ CSV_FIELDS = [
 BENCHMARK_RESULTS_DIR = "data/results"
 
 
-def format_seconds(value):
-    return "" if value is None else f"{value:.6f}"
+def next_run_paths(size, difficulty, results_dir=None):
+    root = Path(results_dir or BENCHMARK_RESULTS_DIR)
+    base_dir = root / f"{size}x{size}" / difficulty
+    data_dir = base_dir / "data"
+    summary_dir = base_dir / "summary"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    summary_dir.mkdir(parents=True, exist_ok=True)
+
+    index = 0
+    while True:
+        csv_path = data_dir / f"run_{index}.csv"
+        summary_path = summary_dir / f"run_{index}.csv"
+        if not csv_path.exists() and not summary_path.exists():
+            return csv_path, summary_path
+        index += 1
 
 
-def format_metric(value):
-    return "" if value is None else str(value)
-
-
-def csv_row(benchmark_type, puzzle_index, solver_name, result, metadata=None):
+def result_row(benchmark_type, puzzle_index, solver_name, result, metadata=None):
     metadata = metadata or {}
     return {
         "benchmark_type": benchmark_type,
@@ -43,142 +52,100 @@ def csv_row(benchmark_type, puzzle_index, solver_name, result, metadata=None):
         "puzzle_index": puzzle_index,
         "solver": solver_name,
         "status": result.status,
-        "runtime_seconds": format_seconds(result.runtime_seconds),
-        "setup_seconds": format_seconds(result.setup_seconds),
-        "solve_seconds": format_seconds(result.solve_seconds),
-        "backtracks": format_metric(result.backtracks),
-        "assignments": format_metric(result.assignments),
-        "recursive_calls": format_metric(result.recursive_calls),
+        "runtime_seconds": result.runtime_seconds,
+        "setup_seconds": 0.0 if result.setup_seconds is None else result.setup_seconds,
+        "solve_seconds": result.solve_seconds,
+        "backtracks": result.backtracks,
+        "assignments": result.assignments,
+        "recursive_calls": result.recursive_calls,
         "solution_found": result.solved,
         "error": result.error or "",
     }
 
 
-def benchmark_data_directory(size, difficulty, results_dir=None):
-    if results_dir is None:
-        results_dir = BENCHMARK_RESULTS_DIR
-    return Path(results_dir) / f"{size}x{size}" / difficulty / "data"
+def results_dataframe(rows):
+    table = pd.DataFrame(rows, columns=CSV_FIELDS)
+    table["solution_found"] = table["solution_found"].fillna(False).astype(bool)
+    return table
 
 
-def benchmark_summary_directory(size, difficulty, results_dir=None):
-    if results_dir is None:
-        results_dir = BENCHMARK_RESULTS_DIR
-    return Path(results_dir) / f"{size}x{size}" / difficulty / "summary"
+def summary_dataframe(table, tested=None):
+    if table.empty:
+        return pd.DataFrame()
+
+    total_tested = tested if tested is not None else table["puzzle_index"].nunique()
+    rows = [
+        _summary_row(name, solver_results, total_tested)
+        for name, solver_results in table.groupby("solver", sort=False)
+    ]
+    return pd.DataFrame(rows)
 
 
-def next_benchmark_run_paths(size, difficulty, results_dir=None):
-    data_dir = benchmark_data_directory(size, difficulty, results_dir)
-    summary_dir = benchmark_summary_directory(size, difficulty, results_dir)
-    data_dir.mkdir(parents=True, exist_ok=True)
-    summary_dir.mkdir(parents=True, exist_ok=True)
+def print_summary_table(table):
+    if not table.empty:
+        display = table.copy()
+        display["solved"] = (
+            display["solved"].astype(str) + "/" + display["tested"].astype(str)
+        )
+        display = display.drop(columns=["tested"])
+        print(
+            display.to_string(
+                index=False,
+                na_rep="-",
+                formatters={
+                    "success_rate": "{:.1f}%".format,
+                    "total_runtime_s": _format_number,
+                    "avg_runtime_s": _format_number,
+                    "setup_avg_s": _format_number,
+                    "solve_avg_s": _format_number,
+                    "backtracks_avg": _format_number,
+                    "assignments_avg": _format_number,
+                    "recursive_calls_avg": _format_number,
+                },
+            )
+        )
 
-    index = 0
-    while True:
-        csv_path = data_dir / f"run_{index}.csv"
-        json_path = summary_dir / f"run_{index}.json"
-        if not csv_path.exists() and not json_path.exists():
-            return csv_path, json_path
-        index += 1
 
-
-def write_benchmark_csv(rows, csv_path):
+def write_csv(table, csv_path):
     csv_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(csv_path, "w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=CSV_FIELDS)
-        writer.writeheader()
-        writer.writerows(rows)
+    table.to_csv(csv_path, index=False)
     return csv_path
 
 
-def write_benchmark_summary_json(summary, json_path):
-    json_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(json_path, "w", encoding="utf-8") as f:
-        json.dump(summary, f, indent=2, sort_keys=True)
-        f.write("\n")
-    return json_path
-
-
-def average_present(results, attr):
-    values = [
-        getattr(result, attr)
-        for result in results
-        if getattr(result, attr) is not None
+def _summary_row(name, table, tested):
+    average_fields = [
+        "setup_seconds",
+        "solve_seconds",
+        "backtracks",
+        "assignments",
+        "recursive_calls",
     ]
-    if not values:
-        return None
-    return sum(values) / len(values)
+    solved = int(table["solution_found"].sum()) if not table.empty else 0
+    total_runtime = table["runtime_seconds"].sum() if not table.empty else 0.0
+    avg_runtime = total_runtime / tested if tested else 0.0
+    success_rate = (solved / tested * 100) if tested else 0.0
+    averages = table[average_fields].mean()
+    solve_average = averages["solve_seconds"]
 
+    if pd.isna(solve_average) and (
+        not table.empty and table["status"].ne("error").any()
+    ):
+        solve_average = avg_runtime
 
-def format_summary_seconds(value):
-    return "-" if value is None else f"{value:.6f}"
-
-
-def format_summary_average(value):
-    return "-" if value is None else f"{value:.2f}"
-
-
-def benchmark_summary_rows(results_by_solver, tested):
-    rows = []
-
-    for name, results in results_by_solver.items():
-        solved = sum(1 for result in results if result.solved)
-        total_runtime = sum(result.runtime_seconds for result in results)
-        avg_runtime = total_runtime / tested if tested else 0.0
-        success_rate = (solved / tested * 100) if tested else 0.0
-        solve_average = average_present(results, "solve_seconds")
-        if solve_average is None and any(result.status != "error" for result in results):
-            solve_average = avg_runtime
-
-        rows.append(
-            {
-                "solver": name,
-                "solved": f"{solved}/{tested}",
-                "success_rate": f"{success_rate:.1f}%",
-                "total_runtime_s": f"{total_runtime:.4f}",
-                "avg_runtime_s": f"{avg_runtime:.6f}",
-                "setup_avg_s": format_summary_seconds(
-                    average_present(results, "setup_seconds")
-                ),
-                "solve_avg_s": format_summary_seconds(solve_average),
-                "backtracks_avg": format_summary_average(
-                    average_present(results, "backtracks")
-                ),
-                "assignments_avg": format_summary_average(
-                    average_present(results, "assignments")
-                ),
-                "recursive_calls_avg": format_summary_average(
-                    average_present(results, "recursive_calls")
-                ),
-            }
-        )
-
-    return rows
-
-
-def print_plain_summary_table(rows):
-    if not rows:
-        return
-
-    headers = list(rows[0].keys())
-    widths = {
-        header: max(len(header), *(len(str(row[header])) for row in rows))
-        for header in headers
+    return {
+        "solver": name,
+        "solved": solved,
+        "tested": tested,
+        "success_rate": success_rate,
+        "total_runtime_s": total_runtime,
+        "avg_runtime_s": avg_runtime,
+        "setup_avg_s": averages["setup_seconds"],
+        "solve_avg_s": solve_average,
+        "backtracks_avg": averages["backtracks"],
+        "assignments_avg": averages["assignments"],
+        "recursive_calls_avg": averages["recursive_calls"],
     }
-    header_row = "  ".join(header.ljust(widths[header]) for header in headers)
-    divider = "  ".join("-" * widths[header] for header in headers)
-
-    print(header_row)
-    print(divider)
-    for row in rows:
-        print("  ".join(str(row[header]).ljust(widths[header]) for header in headers))
 
 
-def print_summary_table(rows):
-    try:
-        import pandas as pd
-    except ImportError:
-        print_plain_summary_table(rows)
-        return
-
-    table = pd.DataFrame(rows)
-    print(table.to_string(index=False))
+def _format_number(value, decimals=6):
+    return "-" if pd.isna(value) else f"{value:.{decimals}f}"

@@ -1,32 +1,29 @@
-def visualization_menu(benchmark_result):
-    if benchmark_result is None:
+import matplotlib
+import matplotlib.pyplot as plt
+
+matplotlib.use("TkAgg")
+
+def visualization_menu(results_table):
+    if results_table is None or results_table.empty:
         return
 
     visual = input("\nVisualize data? (y/n): ").strip().lower()
     if visual != "y":
         return
 
-    times_by_solver = benchmark_result["times_by_solver"]
-    results_by_solver = benchmark_result["results_by_solver"]
-    tested = benchmark_result["tested"]
+    times_by_solver = {
+        name: solver_results["runtime_seconds"].tolist()
+        for name, solver_results in results_table.groupby("solver", sort=False)
+    }
+    tested = results_table["puzzle_index"].nunique()
     show_naive = True
     if "naive" in times_by_solver:
         show_naive = input("Show naive solver on graph? (y/n): ").strip().lower() == "y"
-    avgs = {
-        name: (sum(result.runtime_seconds for result in results) / tested)
-        if tested
-        else 0.0
-        for name, results in results_by_solver.items()
-    }
+    avgs = results_table.groupby("solver", sort=False)["runtime_seconds"].mean().to_dict()
     visualize_benchmark(times_by_solver, tested, avgs, show_naive=show_naive)
 
 
 def visualize_benchmark(times_by_solver, tested, avgs, show_naive=True):
-    import matplotlib
-    import matplotlib.pyplot as plt
-
-    matplotlib.use("TkAgg")
-
     plt.figure()
     for name, ts in times_by_solver.items():
         if name == "naive" and not show_naive:

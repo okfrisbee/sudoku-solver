@@ -6,12 +6,12 @@ import time
 from cli_helpers import prompt_choice
 from generator import dataset_size_from_path, read_dataset, select_dataset
 from .reporting import (
-    benchmark_summary_rows,
-    csv_row,
-    next_benchmark_run_paths,
+    next_run_paths,
     print_summary_table,
-    write_benchmark_csv,
-    write_benchmark_summary_json,
+    result_row,
+    results_dataframe,
+    summary_dataframe,
+    write_csv as write_table_csv,
 )
 
 from solvers.csp import solve_csp
@@ -126,8 +126,6 @@ def benchmark_dataset(
         else Path(dataset_path).stem
     )
     csv_rows = []
-    results_by_solver = {name: [] for name in solvers}
-    times_by_solver = {name: [] for name in solvers}
     tested = 0
     dataset_name = Path(dataset_path).name
 
@@ -140,23 +138,20 @@ def benchmark_dataset(
                 puzzle,
                 timeout_seconds=timeout_seconds,
             )
-            results_by_solver[name].append(result)
-            times_by_solver[name].append(result.runtime_seconds)
-            if write_csv:
-                csv_rows.append(
-                    csv_row(
-                        f"{size}x{size}",
-                        i,
-                        name,
-                        result,
-                        metadata={
-                            "dataset": dataset_name,
-                            "size": size,
-                            "difficulty": record.get("difficulty", ""),
-                            "clues": record.get("actual_clues", ""),
-                        },
-                    )
+            csv_rows.append(
+                result_row(
+                    f"{size}x{size}",
+                    i,
+                    name,
+                    result,
+                    metadata={
+                        "dataset": dataset_name,
+                        "size": size,
+                        "difficulty": record.get("difficulty", ""),
+                        "clues": record.get("actual_clues", ""),
+                    },
                 )
+            )
 
             if result.solved:
                 row_parts.append(f"{name}={result.runtime_seconds:.4f}s")
@@ -166,41 +161,20 @@ def benchmark_dataset(
         tested += 1
         print(" | ".join(row_parts))
 
-    summary_rows = benchmark_summary_rows(results_by_solver, tested)
-    benchmark_result = {
-        "dataset": {
-            "path": str(dataset_path),
-            "name": dataset_name,
-            "size": size,
-            "difficulty": difficulty,
-            "puzzle_count": len(records),
-        },
-        "tested": tested,
-        "solvers": list(solvers),
-        "summary_rows": summary_rows,
-        "results_by_solver": results_by_solver,
-        "times_by_solver": times_by_solver,
-    }
+    results_table = results_dataframe(csv_rows)
+    summary_table = summary_dataframe(results_table, tested)
 
     print("\n-----Results-----")
     print(f"Puzzles Tested: {tested}\n")
-    print_summary_table(summary_rows)
+    print_summary_table(summary_table)
     if write_csv:
-        csv_path, json_path = next_benchmark_run_paths(size, difficulty)
-        csv_file = write_benchmark_csv(csv_rows, csv_path)
-        summary_file = write_benchmark_summary_json(
-            {
-                "dataset": benchmark_result["dataset"],
-                "tested": benchmark_result["tested"],
-                "solvers": benchmark_result["solvers"],
-                "summary_rows": benchmark_result["summary_rows"],
-            },
-            json_path,
-        )
+        csv_path, summary_path = next_run_paths(size, difficulty)
+        csv_file = write_table_csv(results_table, csv_path)
+        summary_file = write_table_csv(summary_table, summary_path)
         print(f"\nCSV written to: {csv_file}")
-        print(f"JSON summary written to: {summary_file}")
+        print(f"Summary CSV written to: {summary_file}")
 
-    return benchmark_result
+    return results_table
 
 
 def benchmark_menu():
@@ -220,7 +194,7 @@ def benchmark_menu():
     solver_names = ["csp"] if solver_mode == "csp only" else None
 
     print()
-    write_csv = input("Save benchmark results to CSV and JSON? (y/n): ").strip().lower() == "y"
+    write_csv = input("Save benchmark results and summary to CSV? (y/n): ").strip().lower() == "y"
     print()
     return benchmark_dataset(
         dataset_path,

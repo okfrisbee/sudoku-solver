@@ -1,6 +1,6 @@
 import contextlib
+import csv
 import io
-import json
 from pathlib import Path
 import tempfile
 import time
@@ -21,13 +21,13 @@ def slow_solver(_puzzle):
 class BenchmarkTests(unittest.TestCase):
     def test_benchmark_run_paths_split_artifacts_and_share_index(self):
         with tempfile.TemporaryDirectory() as root:
-            csv_path, json_path = benchmark_module.next_benchmark_run_paths(
+            csv_path, summary_path = benchmark_module.next_run_paths(
                 9,
                 "medium",
                 results_dir=root,
             )
             csv_path.touch()
-            next_csv_path, next_json_path = benchmark_module.next_benchmark_run_paths(
+            next_csv_path, next_summary_path = benchmark_module.next_run_paths(
                 9,
                 "medium",
                 results_dir=root,
@@ -35,21 +35,21 @@ class BenchmarkTests(unittest.TestCase):
 
         self.assertEqual(csv_path, Path(root) / "9x9" / "medium" / "data" / "run_0.csv")
         self.assertEqual(
-            json_path,
-            Path(root) / "9x9" / "medium" / "summary" / "run_0.json",
+            summary_path,
+            Path(root) / "9x9" / "medium" / "summary" / "run_0.csv",
         )
         self.assertEqual(next_csv_path.name, "run_1.csv")
-        self.assertEqual(next_json_path.name, "run_1.json")
+        self.assertEqual(next_summary_path.name, "run_1.csv")
 
     def test_benchmark_run_paths_check_existing_summary_files(self):
         with tempfile.TemporaryDirectory() as root:
-            csv_path, json_path = benchmark_module.next_benchmark_run_paths(
+            csv_path, summary_path = benchmark_module.next_run_paths(
                 9,
                 "medium",
                 results_dir=root,
             )
-            json_path.touch()
-            next_csv_path, next_json_path = benchmark_module.next_benchmark_run_paths(
+            summary_path.touch()
+            next_csv_path, next_summary_path = benchmark_module.next_run_paths(
                 9,
                 "medium",
                 results_dir=root,
@@ -57,7 +57,7 @@ class BenchmarkTests(unittest.TestCase):
 
         self.assertEqual(csv_path.name, "run_0.csv")
         self.assertEqual(next_csv_path.name, "run_1.csv")
-        self.assertEqual(next_json_path.name, "run_1.json")
+        self.assertEqual(next_summary_path.name, "run_1.csv")
 
     def test_naive_benchmark_keeps_tokenized_multi_digit_values(self):
         record = {
@@ -114,9 +114,9 @@ class BenchmarkTests(unittest.TestCase):
 
         self.assertIn("Puzzles Tested: 1", output.getvalue())
         self.assertIn("fake=0.0010s", output.getvalue())
-        self.assertEqual(result["tested"], 1)
-        self.assertEqual(result["solvers"], ["fake"])
-        self.assertEqual(result["times_by_solver"], {"fake": [0.001]})
+        self.assertEqual(result["puzzle_index"].nunique(), 1)
+        self.assertEqual(result["solver"].tolist(), ["fake"])
+        self.assertEqual(result["runtime_seconds"].tolist(), [0.001])
 
     def test_benchmark_dataset_can_run_csp_only(self):
         record = generate_dataset_records(4, "easy", 1, seed=123, verify=False)[0]
@@ -186,7 +186,7 @@ class BenchmarkTests(unittest.TestCase):
         self.assertIn("slow=TIMEOUT", output.getvalue())
         self.assertIn("0/1", output.getvalue())
 
-    def test_benchmark_dataset_writes_csv_data_and_json_summary(self):
+    def test_benchmark_dataset_writes_csv_data_and_summary(self):
         record = generate_dataset_records(4, "easy", 1, seed=123, verify=False)[0]
 
         with tempfile.TemporaryDirectory() as root:
@@ -221,32 +221,31 @@ class BenchmarkTests(unittest.TestCase):
                         )
 
             csv_path = Path(root) / "results" / "4x4" / "easy" / "data" / "run_0.csv"
-            json_path = Path(root) / "results" / "4x4" / "easy" / "summary" / "run_0.json"
+            summary_path = Path(root) / "results" / "4x4" / "easy" / "summary" / "run_0.csv"
             self.assertTrue(csv_path.exists())
-            self.assertTrue(json_path.exists())
-            with open(json_path, encoding="utf-8") as f:
-                summary = json.load(f)
+            self.assertTrue(summary_path.exists())
+            with open(summary_path, newline="", encoding="utf-8") as f:
+                summary_rows = list(csv.DictReader(f))
 
-        self.assertEqual(summary["dataset"]["difficulty"], "easy")
-        self.assertEqual(summary["dataset"]["puzzle_count"], 1)
-        self.assertEqual(summary["tested"], 1)
-        self.assertEqual(summary["solvers"], ["fake"])
-        self.assertEqual(summary["summary_rows"][0]["solver"], "fake")
+        self.assertEqual(summary_rows[0]["solver"], "fake")
+        self.assertEqual(summary_rows[0]["solved"], "1")
+        self.assertEqual(summary_rows[0]["tested"], "1")
 
     def test_visualization_menu_uses_returned_benchmark_data(self):
-        result = {
-            "tested": 1,
-            "times_by_solver": {"naive": [0.001]},
-            "results_by_solver": {
-                "naive": [
+        result = benchmark_module.results_dataframe(
+            [
+                benchmark_module.result_row(
+                    "4x4",
+                    1,
+                    "naive",
                     SolverResult(
                         solution="1234",
                         status="solved",
                         runtime_seconds=0.001,
-                    )
-                ],
-            },
-        }
+                    ),
+                )
+            ]
+        )
 
         with patch("builtins.input", side_effect=["y", "n"]):
             with patch("benchmark.visualization.visualize_benchmark") as visualize:
@@ -263,7 +262,7 @@ class BenchmarkTests(unittest.TestCase):
         import main
 
         selected_path = Path("data/datasets/4x4_easy_1.jsonl")
-        benchmark_result = {"tested": 1}
+        results_table = object()
 
         with patch("benchmark.runner.select_dataset", return_value=selected_path) as select:
             with patch(
@@ -273,7 +272,7 @@ class BenchmarkTests(unittest.TestCase):
                 with patch("builtins.input", return_value="n"):
                     with patch(
                         "benchmark.runner.benchmark_dataset",
-                        return_value=benchmark_result,
+                        return_value=results_table,
                     ) as run_benchmark:
                         result = main.benchmark_menu()
 
@@ -284,20 +283,20 @@ class BenchmarkTests(unittest.TestCase):
             write_csv=False,
             solver_names=["csp"],
         )
-        self.assertIs(result, benchmark_result)
+        self.assertIs(result, results_table)
 
     def test_main_runs_visualization_after_benchmark(self):
         import main
 
-        benchmark_result = {"tested": 1}
+        results_table = object()
 
         with patch("builtins.input", side_effect=["4", "5"]):
             with patch("main.os.system"):
-                with patch("main.benchmark_menu", return_value=benchmark_result):
+                with patch("main.benchmark_menu", return_value=results_table):
                     with patch("main.visualization_menu") as visualization:
                         main.main()
 
-        visualization.assert_called_once_with(benchmark_result)
+        visualization.assert_called_once_with(results_table)
 
 
 if __name__ == "__main__":

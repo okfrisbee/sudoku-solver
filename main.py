@@ -50,8 +50,8 @@ def main():
 
         elif user_input == "4":
             os.system("clear")
-            benchmark_result = benchmark_menu()
-            visualization_menu(benchmark_result)
+            results_table = benchmark_menu()
+            visualization_menu(results_table)
 
         elif user_input == "5":
             return
