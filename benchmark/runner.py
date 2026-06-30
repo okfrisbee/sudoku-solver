@@ -6,9 +6,8 @@ import time
 from cli_helpers import prompt_choice
 from generator import dataset_size_from_path, read_dataset, select_dataset
 from .reporting import (
-    next_run_paths,
     print_summary_table,
-    result_row,
+    result_paths,
     results_dataframe,
     summary_dataframe,
     write_csv as write_table_csv,
@@ -23,6 +22,14 @@ from solvers.smt import solve_smt
 
 
 BENCHMARK_SOLVER_TIMEOUT_SECONDS = 60
+NAIVE_SUPPORTED_SIZES = {4, 9, 16}
+SOLVERS = {
+    "naive": solve_naive,
+    "csp": solve_csp,
+    "sat": solve_sat,
+    "smt": solve_smt,
+    "dlx": solve_dlx,
+}
 
 
 def safe_solve(solver_fn, puzzle) -> SolverResult:
@@ -79,15 +86,24 @@ def solve_with_timeout(
 
 
 def solvers_for_size(size):
-    solvers = {
-        "csp": solve_csp,
-        "sat": solve_sat,
-        "smt": solve_smt,
-        "dlx": solve_dlx,
+    return {
+        name: solver
+        for name, solver in SOLVERS.items()
+        if name != "naive" or size in NAIVE_SUPPORTED_SIZES
     }
-    if size in {4, 9, 16}:
-        return {"naive": solve_naive, **solvers}
-    return solvers
+
+
+def _csv_row(size, puzzle_index, solver_name, result, record):
+    return {
+        "puzzle_index": puzzle_index,
+        "solver_name": solver_name,
+        "result": result,
+        "metadata": {
+            "size": size,
+            "difficulty": record.get("difficulty", ""),
+            "clues": record.get("actual_clues", ""),
+        },
+    }
 
 
 def benchmark_dataset(
@@ -104,30 +120,14 @@ def benchmark_dataset(
 
     solvers = solvers_for_size(size)
     if solver_names is not None:
-        requested = set(solver_names)
         solvers = {
             name: solver
             for name, solver in solvers.items()
-            if name in requested
+            if name in solver_names
         }
-        missing = requested - set(solvers)
-        if missing:
-            print(f"\nNo solver found for: {', '.join(sorted(missing))}")
-            return None
 
-    record_difficulties = {
-        record.get("difficulty", "")
-        for record in records
-        if record.get("difficulty")
-    }
-    difficulty = (
-        next(iter(record_difficulties))
-        if len(record_difficulties) == 1
-        else Path(dataset_path).stem
-    )
     csv_rows = []
     tested = 0
-    dataset_name = Path(dataset_path).name
 
     for i, record in enumerate(records, start=1):
         puzzle = record["puzzle"]
@@ -138,20 +138,7 @@ def benchmark_dataset(
                 puzzle,
                 timeout_seconds=timeout_seconds,
             )
-            csv_rows.append(
-                result_row(
-                    f"{size}x{size}",
-                    i,
-                    name,
-                    result,
-                    metadata={
-                        "dataset": dataset_name,
-                        "size": size,
-                        "difficulty": record.get("difficulty", ""),
-                        "clues": record.get("actual_clues", ""),
-                    },
-                )
-            )
+            csv_rows.append(_csv_row(size, i, name, result, record))
 
             if result.solved:
                 row_parts.append(f"{name}={result.runtime_seconds:.4f}s")
@@ -168,7 +155,7 @@ def benchmark_dataset(
     print(f"Puzzles Tested: {tested}\n")
     print_summary_table(summary_table)
     if write_csv:
-        csv_path, summary_path = next_run_paths(size, difficulty)
+        csv_path, summary_path = result_paths(dataset_path)
         csv_file = write_table_csv(results_table, csv_path)
         summary_file = write_table_csv(summary_table, summary_path)
         print(f"\nCSV written to: {csv_file}")
@@ -187,11 +174,12 @@ def benchmark_menu():
         print(exc)
         return
 
-    solver_mode = prompt_choice("\nSelect benchmark solver mode:", ["all", "csp only"])
+    solver_options = ["all", *solvers_for_size(size)]
+    solver_mode = prompt_choice("\nSelect benchmark solver mode:", solver_options)
     if solver_mode is None:
         print("Invalid benchmark solver mode.")
         return
-    solver_names = ["csp"] if solver_mode == "csp only" else None
+    solver_names = None if solver_mode == "all" else [solver_mode]
 
     print()
     write_csv = input("Save benchmark results and summary to CSV? (y/n): ").strip().lower() == "y"

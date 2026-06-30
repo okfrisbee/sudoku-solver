@@ -19,45 +19,26 @@ def slow_solver(_puzzle):
 
 
 class BenchmarkTests(unittest.TestCase):
-    def test_benchmark_run_paths_split_artifacts_and_share_index(self):
+    def test_benchmark_result_paths_use_stable_dataset_names(self):
         with tempfile.TemporaryDirectory() as root:
-            csv_path, summary_path = benchmark_module.next_run_paths(
-                9,
-                "medium",
+            csv_path, summary_path = benchmark_module.result_paths(
+                "data/datasets/9x9_medium_100.jsonl",
                 results_dir=root,
             )
             csv_path.touch()
-            next_csv_path, next_summary_path = benchmark_module.next_run_paths(
-                9,
-                "medium",
+            summary_path.touch()
+            next_csv_path, next_summary_path = benchmark_module.result_paths(
+                "data/datasets/9x9_medium_100.jsonl",
                 results_dir=root,
             )
 
-        self.assertEqual(csv_path, Path(root) / "9x9" / "medium" / "data" / "run_0.csv")
+        self.assertEqual(csv_path, Path(root) / "data" / "9x9_medium_100_results.csv")
         self.assertEqual(
             summary_path,
-            Path(root) / "9x9" / "medium" / "summary" / "run_0.csv",
+            Path(root) / "summary" / "9x9_medium_100_summary.csv",
         )
-        self.assertEqual(next_csv_path.name, "run_1.csv")
-        self.assertEqual(next_summary_path.name, "run_1.csv")
-
-    def test_benchmark_run_paths_check_existing_summary_files(self):
-        with tempfile.TemporaryDirectory() as root:
-            csv_path, summary_path = benchmark_module.next_run_paths(
-                9,
-                "medium",
-                results_dir=root,
-            )
-            summary_path.touch()
-            next_csv_path, next_summary_path = benchmark_module.next_run_paths(
-                9,
-                "medium",
-                results_dir=root,
-            )
-
-        self.assertEqual(csv_path.name, "run_0.csv")
-        self.assertEqual(next_csv_path.name, "run_1.csv")
-        self.assertEqual(next_summary_path.name, "run_1.csv")
+        self.assertEqual(next_csv_path, csv_path)
+        self.assertEqual(next_summary_path, summary_path)
 
     def test_naive_benchmark_keeps_tokenized_multi_digit_values(self):
         record = {
@@ -220,8 +201,8 @@ class BenchmarkTests(unittest.TestCase):
                             write_csv=True,
                         )
 
-            csv_path = Path(root) / "results" / "4x4" / "easy" / "data" / "run_0.csv"
-            summary_path = Path(root) / "results" / "4x4" / "easy" / "summary" / "run_0.csv"
+            csv_path = Path(root) / "results" / "data" / "4x4_easy_1_results.csv"
+            summary_path = Path(root) / "results" / "summary" / "4x4_easy_1_summary.csv"
             self.assertTrue(csv_path.exists())
             self.assertTrue(summary_path.exists())
             with open(summary_path, newline="", encoding="utf-8") as f:
@@ -234,16 +215,15 @@ class BenchmarkTests(unittest.TestCase):
     def test_visualization_menu_uses_returned_benchmark_data(self):
         result = benchmark_module.results_dataframe(
             [
-                benchmark_module.result_row(
-                    "4x4",
-                    1,
-                    "naive",
-                    SolverResult(
+                {
+                    "puzzle_index": 1,
+                    "solver_name": "naive",
+                    "result": SolverResult(
                         solution="1234",
                         status="solved",
                         runtime_seconds=0.001,
                     ),
-                )
+                }
             ]
         )
 
@@ -258,7 +238,7 @@ class BenchmarkTests(unittest.TestCase):
             show_naive=False,
         )
 
-    def test_benchmark_menu_passes_csp_only_filter(self):
+    def test_benchmark_menu_passes_selected_solver_filter(self):
         import main
 
         selected_path = Path("data/datasets/4x4_easy_1.jsonl")
@@ -267,8 +247,8 @@ class BenchmarkTests(unittest.TestCase):
         with patch("benchmark.runner.select_dataset", return_value=selected_path) as select:
             with patch(
                 "benchmark.runner.prompt_choice",
-                return_value="csp only",
-            ):
+                return_value="csp",
+            ) as prompt:
                 with patch("builtins.input", return_value="n"):
                     with patch(
                         "benchmark.runner.benchmark_dataset",
@@ -277,6 +257,10 @@ class BenchmarkTests(unittest.TestCase):
                         result = main.benchmark_menu()
 
         select.assert_called_once_with()
+        prompt.assert_called_once_with(
+            "\nSelect benchmark solver mode:",
+            ["all", "naive", "csp", "sat", "smt", "dlx"],
+        )
         run_benchmark.assert_called_once_with(
             selected_path,
             4,

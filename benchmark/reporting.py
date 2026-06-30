@@ -4,8 +4,6 @@ import pandas as pd
 
 
 CSV_FIELDS = [
-    "benchmark_type",
-    "dataset",
     "size",
     "difficulty",
     "clues",
@@ -24,28 +22,22 @@ CSV_FIELDS = [
 BENCHMARK_RESULTS_DIR = "data/results"
 
 
-def next_run_paths(size, difficulty, results_dir=None):
+def result_paths(dataset_path, results_dir=None):
     root = Path(results_dir or BENCHMARK_RESULTS_DIR)
-    base_dir = root / f"{size}x{size}" / difficulty
-    data_dir = base_dir / "data"
-    summary_dir = base_dir / "summary"
+    dataset_stem = Path(dataset_path).stem
+    data_dir = root / "data"
+    summary_dir = root / "summary"
     data_dir.mkdir(parents=True, exist_ok=True)
     summary_dir.mkdir(parents=True, exist_ok=True)
 
-    index = 0
-    while True:
-        csv_path = data_dir / f"run_{index}.csv"
-        summary_path = summary_dir / f"run_{index}.csv"
-        if not csv_path.exists() and not summary_path.exists():
-            return csv_path, summary_path
-        index += 1
+    csv_path = data_dir / f"{dataset_stem}_results.csv"
+    summary_path = summary_dir / f"{dataset_stem}_summary.csv"
+    return csv_path, summary_path
 
 
-def result_row(benchmark_type, puzzle_index, solver_name, result, metadata=None):
+def _result_row(puzzle_index, solver_name, result, metadata=None):
     metadata = metadata or {}
     return {
-        "benchmark_type": benchmark_type,
-        "dataset": metadata.get("dataset", ""),
         "size": metadata.get("size", ""),
         "difficulty": metadata.get("difficulty", ""),
         "clues": metadata.get("clues", ""),
@@ -63,8 +55,9 @@ def result_row(benchmark_type, puzzle_index, solver_name, result, metadata=None)
     }
 
 
-def results_dataframe(rows):
-    table = pd.DataFrame(rows, columns=CSV_FIELDS)
+def results_dataframe(csv_rows):
+    result_rows = [_result_row(**row) for row in csv_rows]
+    table = pd.DataFrame(result_rows, columns=CSV_FIELDS)
     table["solution_found"] = table["solution_found"].fillna(False).astype(bool)
     return table
 
