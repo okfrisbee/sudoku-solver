@@ -11,6 +11,7 @@ from benchmark import runner as benchmark_module
 from benchmark import visualization as benchmark_visualization
 from generator import generate_dataset_records, write_dataset_records
 from solvers.metrics import SolverResult
+from tests.config_helpers import temporary_config
 
 
 def slow_solver(_puzzle):
@@ -18,19 +19,22 @@ def slow_solver(_puzzle):
     return SolverResult(solution=None, status="failed", runtime_seconds=1.0)
 
 
+def crashing_solver(_puzzle):
+    raise RuntimeError("boom")
+
+
 class BenchmarkTests(unittest.TestCase):
     def test_benchmark_result_paths_use_stable_dataset_names(self):
         with tempfile.TemporaryDirectory() as root:
-            csv_path, summary_path = benchmark_module.result_paths(
-                "data/datasets/9x9_medium_100.jsonl",
-                results_dir=root,
-            )
-            csv_path.touch()
-            summary_path.touch()
-            next_csv_path, next_summary_path = benchmark_module.result_paths(
-                "data/datasets/9x9_medium_100.jsonl",
-                results_dir=root,
-            )
+            with temporary_config(root, benchmark_results_dir=root):
+                csv_path, summary_path = benchmark_module.result_paths(
+                    "data/datasets/9x9_medium_100.jsonl",
+                )
+                csv_path.touch()
+                summary_path.touch()
+                next_csv_path, next_summary_path = benchmark_module.result_paths(
+                    "data/datasets/9x9_medium_100.jsonl",
+                )
 
         self.assertEqual(csv_path, Path(root) / "data" / "9x9_medium_100_results.csv")
         self.assertEqual(
@@ -58,8 +62,8 @@ class BenchmarkTests(unittest.TestCase):
 
         with patch("benchmark.runner.read_dataset", return_value=[record]):
             with patch(
-                "benchmark.runner.solvers_for_size",
-                return_value={"naive": fake_solver},
+                "benchmark.runner.SOLVERS",
+                {"naive": fake_solver},
             ):
                 benchmark_module.benchmark_dataset(
                     Path("data/datasets/16x16_easy_1.jsonl"),
@@ -71,27 +75,27 @@ class BenchmarkTests(unittest.TestCase):
         record = generate_dataset_records(4, "easy", 1, seed=123, verify=False)[0]
 
         with tempfile.TemporaryDirectory() as root:
-            path = write_dataset_records(
-                [record],
-                size=4,
-                difficulty="easy",
-                root=root,
-            )
-
-            def fake_solver(_puzzle):
-                return SolverResult(
-                    solution=record["solution"],
-                    status="solved",
-                    runtime_seconds=0.001,
+            with temporary_config(root, datasets_dir=root):
+                path = write_dataset_records(
+                    [record],
+                    size=4,
+                    difficulty="easy",
                 )
 
-            output = io.StringIO()
-            with patch(
-                "benchmark.runner.solvers_for_size",
-                return_value={"fake": fake_solver},
-            ):
-                with contextlib.redirect_stdout(output):
-                    result = benchmark_module.benchmark_dataset(path, 4, write_csv=False)
+                def fake_solver(_puzzle):
+                    return SolverResult(
+                        solution=record["solution"],
+                        status="solved",
+                        runtime_seconds=0.001,
+                    )
+
+                output = io.StringIO()
+                with patch(
+                    "benchmark.runner.SOLVERS",
+                    {"fake": fake_solver},
+                ):
+                    with contextlib.redirect_stdout(output):
+                        result = benchmark_module.benchmark_dataset(path, 4, write_csv=False)
 
         self.assertIn("Puzzles Tested: 1", output.getvalue())
         self.assertIn("fake=0.0010s", output.getvalue())
@@ -103,39 +107,39 @@ class BenchmarkTests(unittest.TestCase):
         record = generate_dataset_records(4, "easy", 1, seed=123, verify=False)[0]
 
         with tempfile.TemporaryDirectory() as root:
-            dataset_path_for_test = write_dataset_records(
-                [record],
-                size=4,
-                difficulty="easy",
-                root=root,
-            )
-
-            def fake_csp(_puzzle):
-                return SolverResult(
-                    solution=record["solution"],
-                    status="solved",
-                    runtime_seconds=0.001,
+            with temporary_config(root, datasets_dir=root):
+                dataset_path_for_test = write_dataset_records(
+                    [record],
+                    size=4,
+                    difficulty="easy",
                 )
 
-            def fake_sat(_puzzle):
-                return SolverResult(
-                    solution=record["solution"],
-                    status="solved",
-                    runtime_seconds=0.001,
-                )
-
-            output = io.StringIO()
-            with patch(
-                "benchmark.runner.solvers_for_size",
-                return_value={"csp": fake_csp, "sat": fake_sat},
-            ):
-                with contextlib.redirect_stdout(output):
-                    benchmark_module.benchmark_dataset(
-                        dataset_path_for_test,
-                        4,
-                        write_csv=False,
-                        solver_names=["csp"],
+                def fake_csp(_puzzle):
+                    return SolverResult(
+                        solution=record["solution"],
+                        status="solved",
+                        runtime_seconds=0.001,
                     )
+
+                def fake_sat(_puzzle):
+                    return SolverResult(
+                        solution=record["solution"],
+                        status="solved",
+                        runtime_seconds=0.001,
+                    )
+
+                output = io.StringIO()
+                with patch(
+                    "benchmark.runner.SOLVERS",
+                    {"csp": fake_csp, "sat": fake_sat},
+                ):
+                    with contextlib.redirect_stdout(output):
+                        benchmark_module.benchmark_dataset(
+                            dataset_path_for_test,
+                            4,
+                            write_csv=False,
+                            solver_names=["csp"],
+                        )
 
         self.assertIn("csp=0.0010s", output.getvalue())
         self.assertNotIn("sat=", output.getvalue())
@@ -144,55 +148,78 @@ class BenchmarkTests(unittest.TestCase):
         record = generate_dataset_records(4, "easy", 1, seed=123, verify=False)[0]
 
         with tempfile.TemporaryDirectory() as root:
-            dataset_path_for_test = write_dataset_records(
-                [record],
-                size=4,
-                difficulty="easy",
-                root=root,
-            )
+            with temporary_config(root, datasets_dir=root, solver_timeout_seconds=0.05):
+                dataset_path_for_test = write_dataset_records(
+                    [record],
+                    size=4,
+                    difficulty="easy",
+                )
 
-            output = io.StringIO()
-            with patch(
-                "benchmark.runner.solvers_for_size",
-                return_value={"slow": slow_solver},
-            ):
-                with contextlib.redirect_stdout(output):
-                    benchmark_module.benchmark_dataset(
-                        dataset_path_for_test,
-                        4,
-                        write_csv=False,
-                        timeout_seconds=0.05,
-                    )
+                output = io.StringIO()
+                with patch(
+                    "benchmark.runner.SOLVERS",
+                    {"slow": slow_solver},
+                ):
+                    with contextlib.redirect_stdout(output):
+                        benchmark_module.benchmark_dataset(
+                            dataset_path_for_test,
+                            4,
+                            write_csv=False,
+                        )
 
         self.assertIn("slow=TIMEOUT", output.getvalue())
         self.assertIn("0/1", output.getvalue())
+
+    def test_benchmark_dataset_reports_solver_process_crash(self):
+        record = generate_dataset_records(4, "easy", 1, seed=123, verify=False)[0]
+
+        with tempfile.TemporaryDirectory() as root:
+            with temporary_config(root, datasets_dir=root):
+                dataset_path_for_test = write_dataset_records(
+                    [record],
+                    size=4,
+                    difficulty="easy",
+                )
+
+                output = io.StringIO()
+                with patch("benchmark.runner.SOLVERS", {"crash": crashing_solver}):
+                    with contextlib.redirect_stdout(output):
+                        result = benchmark_module.benchmark_dataset(
+                            dataset_path_for_test,
+                            4,
+                            write_csv=False,
+                        )
+
+        self.assertIn("crash=ERROR", output.getvalue())
+        self.assertEqual(result["status"].tolist(), ["error"])
+        self.assertIn("without a result", result["error"].tolist()[0])
 
     def test_benchmark_dataset_writes_csv_data_and_summary(self):
         record = generate_dataset_records(4, "easy", 1, seed=123, verify=False)[0]
 
         with tempfile.TemporaryDirectory() as root:
-            dataset_path_for_test = write_dataset_records(
-                [record],
-                size=4,
-                difficulty="easy",
-                root=root,
-            )
-
-            def fake_solver(_puzzle):
-                return SolverResult(
-                    solution=record["solution"],
-                    status="solved",
-                    runtime_seconds=0.001,
+            with temporary_config(
+                root,
+                datasets_dir=root,
+                benchmark_results_dir=Path(root) / "results",
+            ):
+                dataset_path_for_test = write_dataset_records(
+                    [record],
+                    size=4,
+                    difficulty="easy",
                 )
 
-            output = io.StringIO()
-            with patch(
-                "benchmark.reporting.BENCHMARK_RESULTS_DIR",
-                str(Path(root) / "results"),
-            ):
+                def fake_solver(_puzzle):
+                    return SolverResult(
+                        solution=record["solution"],
+                        status="solved",
+                        runtime_seconds=0.001,
+                    )
+
+                output = io.StringIO()
                 with patch(
-                    "benchmark.runner.solvers_for_size",
-                    return_value={"fake": fake_solver},
+                    "benchmark.runner.SOLVERS",
+                    {"fake": fake_solver},
                 ):
                     with contextlib.redirect_stdout(output):
                         benchmark_module.benchmark_dataset(

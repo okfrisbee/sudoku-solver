@@ -24,6 +24,7 @@ from generator import (
     verify_dataset_records,
     write_dataset_records,
 )
+from tests.config_helpers import temporary_config
 
 
 class SudokuDatasetTests(unittest.TestCase):
@@ -82,13 +83,13 @@ class SudokuDatasetTests(unittest.TestCase):
         records = generate_dataset_records(36, "hard", 1, seed=123, verify=False)
 
         with tempfile.TemporaryDirectory() as root:
-            path = write_dataset_records(
-                records,
-                size=36,
-                difficulty="hard",
-                root=root,
-            )
-            loaded = read_dataset(path, expected_size=36)
+            with temporary_config(root, datasets_dir=root):
+                path = write_dataset_records(
+                    records,
+                    size=36,
+                    difficulty="hard",
+                )
+                loaded = read_dataset(path, expected_size=36)
 
         self.assertEqual(len(loaded), 1)
         self.assertEqual(path.name, "36x36_hard_1.jsonl")
@@ -101,14 +102,14 @@ class SudokuDatasetTests(unittest.TestCase):
         records = generate_dataset_records(36, "easy", 1, seed=123, verify=False)
 
         with tempfile.TemporaryDirectory() as root:
-            path = write_dataset_records(
-                records,
-                size=36,
-                difficulty="easy",
-                root=root,
-            )
-            with self.assertRaises(ValueError):
-                read_dataset(path, expected_size=9)
+            with temporary_config(root, datasets_dir=root):
+                path = write_dataset_records(
+                    records,
+                    size=36,
+                    difficulty="easy",
+                )
+                with self.assertRaises(ValueError):
+                    read_dataset(path, expected_size=9)
 
     def test_dataset_path_uses_stable_size_and_difficulty(self):
         self.assertEqual(
@@ -121,9 +122,10 @@ class SudokuDatasetTests(unittest.TestCase):
         second_records = generate_dataset_records(4, "easy", 2, seed=456, verify=False)
 
         with tempfile.TemporaryDirectory() as root:
-            first = write_dataset_records(first_records, 4, "easy", root=root)
-            second = write_dataset_records(second_records, 4, "easy", root=root)
-            loaded = read_dataset(second, expected_size=4)
+            with temporary_config(root, datasets_dir=root):
+                first = write_dataset_records(first_records, 4, "easy")
+                second = write_dataset_records(second_records, 4, "easy")
+                loaded = read_dataset(second, expected_size=4)
 
         self.assertNotEqual(first, second)
         self.assertEqual(first.name, "4x4_easy_1.jsonl")
@@ -134,9 +136,10 @@ class SudokuDatasetTests(unittest.TestCase):
         records = generate_dataset_records(4, "easy", 1, seed=123, verify=False)
 
         with tempfile.TemporaryDirectory() as root:
-            easy = write_dataset_records(records, 4, "easy", root=root)
-            medium = write_dataset_records(records, 4, "medium", root=root)
-            datasets = list_datasets(4, root=root)
+            with temporary_config(root, datasets_dir=root):
+                easy = write_dataset_records(records, 4, "easy")
+                medium = write_dataset_records(records, 4, "medium")
+                datasets = list_datasets(4)
 
         self.assertEqual(datasets, [easy, medium])
 
@@ -144,9 +147,10 @@ class SudokuDatasetTests(unittest.TestCase):
         records = generate_dataset_records(4, "easy", 1, seed=123, verify=False)
 
         with tempfile.TemporaryDirectory() as root:
-            small = write_dataset_records(records, 4, "easy", root=root)
-            large = write_dataset_records(records, 9, "medium", root=root)
-            datasets = list_datasets(root=root)
+            with temporary_config(root, datasets_dir=root):
+                small = write_dataset_records(records, 4, "easy")
+                large = write_dataset_records(records, 9, "medium")
+                datasets = list_datasets()
 
         self.assertEqual(datasets, [small, large])
 

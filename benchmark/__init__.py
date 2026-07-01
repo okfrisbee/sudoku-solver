@@ -12,9 +12,7 @@ from .runner import (
     SOLVERS,
     benchmark_dataset,
     benchmark_menu,
-    safe_solve,
     solve_with_timeout,
-    solvers_for_size,
 )
 __all__ = [
     "BENCHMARK_RESULTS_DIR",
@@ -26,9 +24,7 @@ __all__ = [
     "print_summary_table",
     "result_paths",
     "results_dataframe",
-    "safe_solve",
     "solve_with_timeout",
-    "solvers_for_size",
     "summary_dataframe",
     "write_csv",
 ]

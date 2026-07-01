@@ -8,15 +8,12 @@ from typing import Any
 
 from board_utils import format_board, parse_board, validate_size
 from cli_helpers import prompt_choice, prompt_positive_int, prompt_size
+from config import load_config
 from .verification import VerificationResult, verify_puzzle
 
 
-DATASETS_DIR = "data/datasets"
-DIFFICULTY_PERCENT_RANGES = {
-    "easy": (0.75, 0.85),
-    "medium": (0.50, 0.60),
-    "hard": (0.25, 0.35),
-}
+DATASETS_DIR = load_config()["paths"]["datasets_dir"]
+DIFFICULTY_PERCENT_RANGES = load_config()["generation"]["clue_percent_ranges"]
 DIFFICULTIES = tuple(DIFFICULTY_PERCENT_RANGES) + ("mixed",)
 REQUIRED_RECORD_FIELDS = {
     "id",
@@ -42,6 +39,14 @@ class GeneratedPuzzle:
     target_clues: int
     actual_clues: int
     verification: VerificationResult
+
+
+def _difficulty_percent_ranges() -> dict[str, tuple[float, float]]:
+    return load_config()["generation"]["clue_percent_ranges"]
+
+
+def _difficulties() -> tuple[str, ...]:
+    return tuple(_difficulty_percent_ranges()) + ("mixed",)
 
 
 def generate_pattern_solution(size: int = 9, seed: int | None = None) -> str:
@@ -118,9 +123,10 @@ def generate_puzzle(
 
 
 def random_clue_percent(difficulty: str, rng: random.Random) -> float:
-    if difficulty not in DIFFICULTY_PERCENT_RANGES:
+    ranges = _difficulty_percent_ranges()
+    if difficulty not in ranges:
         raise ValueError(f"Unsupported difficulty: {difficulty}")
-    low, high = DIFFICULTY_PERCENT_RANGES[difficulty]
+    low, high = ranges[difficulty]
     return rng.uniform(low, high)
 
 
@@ -130,16 +136,17 @@ def clue_count(size: int, difficulty: str, rng: random.Random) -> tuple[int, flo
 
 
 def expand_difficulties(difficulty: str, count: int) -> list[str]:
-    if difficulty not in DIFFICULTIES:
+    ranges = _difficulty_percent_ranges()
+    if difficulty not in _difficulties():
         raise ValueError(f"Unsupported difficulty: {difficulty}")
     if count <= 0:
         raise ValueError("Count must be positive")
     if difficulty != "mixed":
         return [difficulty] * count
 
-    base, remainder = divmod(count, len(DIFFICULTY_PERCENT_RANGES))
+    base, remainder = divmod(count, len(ranges))
     expanded: list[str] = []
-    for name in DIFFICULTY_PERCENT_RANGES:
+    for name in ranges:
         expanded.extend([name] * (base + (1 if remainder > 0 else 0)))
         remainder -= 1
     return expanded
@@ -149,20 +156,19 @@ def dataset_path(
     size: int,
     difficulty: str,
     count: int,
-    root: str | Path = DATASETS_DIR,
 ) -> Path:
     validate_size(size)
-    if difficulty not in DIFFICULTIES:
+    if difficulty not in _difficulties():
         raise ValueError(f"Unsupported difficulty: {difficulty}")
     if count < 0:
         raise ValueError("Count cannot be negative")
-    return Path(root) / f"{size}x{size}_{difficulty}_{count}.jsonl"
+    return Path(load_config()["paths"]["datasets_dir"]) / f"{size}x{size}_{difficulty}_{count}.jsonl"
 
 
-def list_datasets(size: int | None = None, root: str | Path = DATASETS_DIR) -> list[Path]:
+def list_datasets(size: int | None = None) -> list[Path]:
     if size is not None:
         validate_size(size)
-    directory = Path(root)
+    directory = Path(load_config()["paths"]["datasets_dir"])
     if not directory.exists():
         return []
     pattern = f"{size}x{size}_*.jsonl" if size is not None else "*.jsonl"
@@ -180,14 +186,13 @@ def write_dataset_records(
     records: list[dict[str, Any]],
     size: int,
     difficulty: str,
-    root: str | Path = DATASETS_DIR,
 ) -> Path:
     validate_size(size)
-    directory = Path(root)
+    directory = Path(load_config()["paths"]["datasets_dir"])
     directory.mkdir(parents=True, exist_ok=True)
-    if difficulty not in DIFFICULTIES:
+    if difficulty not in _difficulties():
         raise ValueError(f"Unsupported difficulty: {difficulty}")
-    path = dataset_path(size, difficulty, len(records), root=root)
+    path = dataset_path(size, difficulty, len(records))
 
     with open(path, "w", encoding="utf-8") as f:
         for record in records:
@@ -281,17 +286,16 @@ def generate_dataset(
     size: int,
     difficulty: str,
     count: int,
-    root: str | Path = DATASETS_DIR,
     seed: int | None = None,
 ) -> Path:
     records = generate_dataset_records(size, difficulty, count, seed=seed, verify=False)
-    return write_dataset_records(records, size, difficulty, root=root)
+    return write_dataset_records(records, size, difficulty)
 
 
 def prompt_difficulty():
     selected = prompt_choice(
         "\nSelect difficulty:",
-        list(DIFFICULTIES),
+        list(_difficulties()),
     )
     if selected is None:
         print("Invalid difficulty.")

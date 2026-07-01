@@ -1,7 +1,11 @@
+import os
+
 import matplotlib
+
+matplotlib.use("TkAgg" if os.environ.get("DISPLAY") else "Agg")
+
 import matplotlib.pyplot as plt
 
-matplotlib.use("TkAgg")
 
 def visualization_menu(results_table):
     if results_table is None or results_table.empty:

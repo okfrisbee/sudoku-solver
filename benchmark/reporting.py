@@ -2,6 +2,8 @@ from pathlib import Path
 
 import pandas as pd
 
+from config import load_config
+
 
 CSV_FIELDS = [
     "size",
@@ -19,11 +21,11 @@ CSV_FIELDS = [
     "solution_found",
     "error",
 ]
-BENCHMARK_RESULTS_DIR = "data/results"
+BENCHMARK_RESULTS_DIR = load_config()["paths"]["benchmark_results_dir"]
 
 
-def result_paths(dataset_path, results_dir=None):
-    root = Path(results_dir or BENCHMARK_RESULTS_DIR)
+def result_paths(dataset_path):
+    root = Path(load_config()["paths"]["benchmark_results_dir"])
     dataset_stem = Path(dataset_path).stem
     data_dir = root / "data"
     summary_dir = root / "summary"

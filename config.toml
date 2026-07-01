@@ -1,0 +1,11 @@
+[paths]
+datasets_dir = "data/datasets"
+benchmark_results_dir = "data/results"
+
+[generation.clue_percent_ranges]
+easy = [0.75, 0.85]
+medium = [0.50, 0.60]
+hard = [0.25, 0.35]
+
+[benchmark]
+solver_timeout_seconds = 60
